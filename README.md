@@ -8,7 +8,7 @@ One repo, one command, and a fresh Mac ends up configured the same way every tim
 Running the switch builds:
 
 - System settings (dark mode, key repeat, dock position/size, Finder, trackpad, menu bar clock)
-- Homebrew apps (casks, CLI tools, and a few Mac App Store apps via `mas`)
+- Homebrew apps (casks and CLI tools)
 - Nix user packages (ripgrep, fd, fzf, jq, lazygit, Neovim, Hack Nerd Font)
 - Shell (zsh, aliases, starship prompt)
 - Editor (Neovim config with the rose-pine moon theme)
@@ -38,15 +38,13 @@ Change the host label or CPU architecture if needed, and read the Homebrew clean
 ./bootstrap.sh
 ```
 
-`bootstrap.sh` does five things, in order:
+`bootstrap.sh` does four things, in order:
 
 1. Installs Determinate Nix, if it isn't already installed.
 2. Symlinks this repo to `~/.dotfiles`.
    This has to happen before the first build, because `home.nix` points at config files through `~/.dotfiles`.
 3. Checks the `user` configured in `flake.nix` against your actual macOS username, and offers to fix it for you if they differ.
-4. Pauses so you can sign into the Mac App Store app, if you haven't already.
-   This is needed for the `mas`-installed apps in `configuration.nix` (see "About `mas`" below).
-5. Runs the first `darwin-rebuild switch`.
+4. Runs the first `darwin-rebuild switch`.
    It fetches the `darwin-rebuild` tool from the nix-darwin 26.05 release branch, then applies this repo's locked flake config.
 
 After that, `darwin-rebuild` exists and you're on the normal workflow below.
@@ -107,10 +105,9 @@ Read through `brews` and `casks` before you run `bootstrap.sh` or `rebuild.sh` f
 It's a real public Homebrew formula (`brew info herdr` finds it in homebrew-core, no tap needed), so it will install fine.
 If you don't use it, just remove it from `brews` in your copy.
 
-**About `mas`:** `configuration.nix` lists a few apps under `homebrew.masApps` (Amphetamine, ColorSlurp, Dynamic wallpaper), installed via the `mas` Homebrew formula.
-`mas` can't sign into the App Store on its own - you need to already be signed in with your Apple ID for these installs to succeed, which is why `bootstrap.sh` pauses for that before the first switch.
-Unlike `brews` and `casks`, apps under `masApps` are not affected by the `zap` cleanup above - Homebrew Bundle doesn't support cleaning up Mac App Store apps, so removing one from this list won't uninstall it.
-Free/preinstalled Apple apps (Keynote, Pages, Numbers, GarageBand, iMovie, Safari) are deliberately left out: the iWork/iLife ones are free App Store redownloads if you ever need them, and Safari isn't installable at all - it ships with macOS.
+**No Mac App Store apps in this config:** Homebrew Bundle's `mas` integration (`homebrew.masApps`) turned out to be unreliable here - it tried to reinstall Amphetamine, ColorSlurp, and Dynamic wallpaper even though they were already installed and `mas` was signed in, and `brew bundle install` failed as a result.
+Because nix-darwin's activation script runs with `set -e`, that failure aborted the tail end of every `darwin-rebuild switch` before it could mark the build as the current generation - a `mas` install failure would keep breaking every future rebuild, not just the first one.
+Install those three (or any other App Store app) manually instead.
 
 **Heads-up:**
 

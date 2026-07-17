@@ -49,7 +49,6 @@
       "cocoapods"
       "fastlane"
       "gh"
-      "mas"
       "node"
       "nvm"
       "php"
@@ -63,12 +62,5 @@
       "xcodes-app"
       "google-chrome"
     ];
-    # mas needs you to already be signed into the App Store app with your
-    # Apple ID - it can't sign in on its own. See bootstrap.sh Step 4.
-    masApps = {
-      "Amphetamine" = 937984704;
-      "ColorSlurp" = 1287239339;
-      "Dynamic wallpaper" = 1582358382;
-    };
   };
 }

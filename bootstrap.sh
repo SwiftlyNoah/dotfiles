@@ -43,14 +43,7 @@ else
   echo "    flake.nix already matches \"$REAL_USER\", nothing to do."
 fi
 
-echo "==> Step 4: Mac App Store sign-in"
-# homebrew.masApps installs a few apps via `mas`, and mas can't sign into the
-# App Store on its own - it only works once you're already signed in.
-echo "    This config installs a few apps via the Mac App Store (mas)."
-echo "    Open the App Store app and sign in with your Apple ID now if you haven't already."
-read -r -p "    Press enter once you're signed in to continue... " _
-
-echo "==> Step 5: first darwin-rebuild switch (pinned to nix-darwin-26.05)"
+echo "==> Step 4: first darwin-rebuild switch (pinned to nix-darwin-26.05)"
 # darwin-rebuild doesn't exist yet on a fresh machine, so run it straight
 # from the flake this once. After this, rebuild.sh works normally.
 # This fetches the darwin-rebuild tool from the nix-darwin-26.05 release branch,
