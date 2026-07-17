@@ -1,8 +1,0 @@
-2026-07-17T02:46:19.019585Z  INFO herdr::logging: herdr starting event="app.startup" subsystem="client" outcome="started" pid=77090
-2026-07-17T02:46:19.019659Z  INFO herdr::client: connecting to server path=/Users/noahbrauner/.config/herdr/herdr-client.sock
-2026-07-17T02:46:19.265628Z  INFO herdr::client: handshake succeeded version=16 encoding=SemanticFrame
-2026-07-17T02:47:20.950083Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
-2026-07-17T02:48:15.991091Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
-2026-07-17T02:48:15.993136Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
-2026-07-17T02:48:16.147196Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
-2026-07-17T02:48:16.147300Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]

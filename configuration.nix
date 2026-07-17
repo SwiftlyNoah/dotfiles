@@ -20,10 +20,20 @@
       _HIHideMenuBar = true;  # auto-hide the menu bar
       AppleShowAllExtensions = true;
     };
-    dock.autohide = true;
-    finder.FXPreferredViewStyle = "Nlsv";  # list view by default
-    finder.CreateDesktop = false;          # clean desktop
+    dock = {
+      autohide = true;
+      orientation = "left";     # dock on the left edge
+      tilesize = 44;
+      largesize = 128;          # magnified icon size
+      magnification = false;
+    };
+    finder = {
+      FXPreferredViewStyle = "Nlsv";  # list view by default
+      CreateDesktop = false;          # clean desktop
+      ShowPathbar = true;
+    };
     trackpad.Clicking = true;              # tap to click
+    menuExtraClock.ShowSeconds = true;
   };
   nix-homebrew = {
     enable = true;
@@ -39,6 +49,7 @@
       "cocoapods"
       "fastlane"
       "gh"
+      "mas"
       "node"
       "nvm"
       "php"
@@ -46,6 +57,18 @@
     casks = [
       "wezterm"
       "claude-code"
+      "1password"
+      "proxyman"
+      "visual-studio-code"
+      "xcodes-app"
+      "google-chrome"
     ];
+    # mas needs you to already be signed into the App Store app with your
+    # Apple ID - it can't sign in on its own. See bootstrap.sh Step 4.
+    masApps = {
+      "Amphetamine" = 937984704;
+      "ColorSlurp" = 1287239339;
+      "Dynamic wallpaper" = 1582358382;
+    };
   };
 }
