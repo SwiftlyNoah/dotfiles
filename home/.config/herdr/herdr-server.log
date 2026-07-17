@@ -1,0 +1,36 @@
+2026-07-17T02:46:18.971583Z  INFO herdr::platform::macos: raised server file descriptor soft limit previous=2560 target=8192
+2026-07-17T02:46:18.972433Z  INFO herdr::api::server: api server listening path=/Users/noahbrauner/.config/herdr/herdr.sock
+2026-07-17T02:46:18.973241Z  INFO herdr::app: using pane scrollback configuration pane_scrollback_limit_bytes=10000000
+2026-07-17T02:46:18.994230Z  INFO herdr::logging: checking for updates event="update.check.start" subsystem="update" outcome="started"
+2026-07-17T02:46:19.002629Z  INFO herdr::logging: spawning pane terminal event="pane.spawn.start" subsystem="pane" outcome="started" pane_id=1 rows=24 cols=80 scrollback_limit_bytes=10000000
+2026-07-17T02:46:19.006571Z  INFO herdr::logging: pane child spawned event="pane.spawned" subsystem="pane" outcome="ok" pane_id=1 pid=77136
+2026-07-17T02:46:19.007178Z  INFO herdr::logging: workspace created event="workspace.create" subsystem="workspace" outcome="ok" workspace_id="w1" pane_id=1
+2026-07-17T02:46:19.007195Z  INFO herdr::logging: workspace focused event="workspace.focus" subsystem="workspace" outcome="ok" workspace_id="w1"
+2026-07-17T02:46:19.007276Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t1"
+2026-07-17T02:46:19.007319Z  INFO herdr::server::headless: created startup workspace cwd=/Users/noahbrauner/github/SwiftlyNoah/dotfiles
+2026-07-17T02:46:19.007532Z  INFO herdr::server::headless: client protocol socket listening path=/Users/noahbrauner/.config/herdr/herdr-client.sock
+2026-07-17T02:46:19.007586Z  INFO herdr::server::headless: herdr server started api_socket=/Users/noahbrauner/.config/herdr/herdr.sock client_socket=/Users/noahbrauner/.config/herdr/herdr-client.sock
+2026-07-17T02:46:19.007608Z  INFO herdr::logging: herdr starting event="app.startup" subsystem="server" outcome="started" pid=77091
+2026-07-17T02:46:19.265644Z  INFO herdr::server::headless: client connected client_id=2 cols=101 rows=31 cell_width_px=0 cell_height_px=0 render_encoding=SemanticFrame
+2026-07-17T02:46:24.015377Z  INFO herdr::logging: session saved event="persist.save" subsystem="persist" outcome="ok" path=/Users/noahbrauner/.config/herdr/session.json workspaces=1
+2026-07-17T02:46:32.763408Z  INFO herdr::logging: spawning pane terminal event="pane.spawn.start" subsystem="pane" outcome="started" pane_id=2 rows=30 cols=75 scrollback_limit_bytes=10000000
+2026-07-17T02:46:32.770619Z  INFO herdr::logging: pane child spawned event="pane.spawned" subsystem="pane" outcome="ok" pane_id=2 pid=77481
+2026-07-17T02:46:32.771039Z  INFO herdr::logging: tab renamed event="tab.rename" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t2"
+2026-07-17T02:46:32.771129Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t2"
+2026-07-17T02:46:37.776064Z  INFO herdr::logging: session saved event="persist.save" subsystem="persist" outcome="ok" path=/Users/noahbrauner/.config/herdr/session.json workspaces=1
+2026-07-17T02:46:43.652682Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t1"
+2026-07-17T02:46:44.426646Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t2"
+2026-07-17T02:46:49.434147Z  INFO herdr::logging: session saved event="persist.save" subsystem="persist" outcome="ok" path=/Users/noahbrauner/.config/herdr/session.json workspaces=1
+2026-07-17T02:46:57.031605Z  INFO herdr::pane: agent changed pane=2 previous_agent=None agent=Some(Claude) process=claude pgid=Some(77708)
+2026-07-17T02:47:04.530048Z  INFO herdr::server::headless: client resize client_id=2 cols=107 rows=34 cell_width_px=0 cell_height_px=0
+2026-07-17T02:47:04.631757Z  INFO herdr::server::headless: client resize client_id=2 cols=108 rows=35 cell_width_px=0 cell_height_px=0
+2026-07-17T02:47:04.736874Z  INFO herdr::server::headless: client resize client_id=2 cols=111 rows=36 cell_width_px=0 cell_height_px=0
+2026-07-17T02:47:20.950251Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
+2026-07-17T02:48:15.993290Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
+2026-07-17T02:48:16.147372Z  WARN herdr::raw_input: flushing lone escape after input timeout; if this follows an alt chord or focus switch it may reach the pane as plain esc bytes=[27]
+2026-07-17T05:04:42.942778Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t1"
+2026-07-17T05:04:44.691447Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t2"
+2026-07-17T05:04:47.997013Z  INFO herdr::logging: tab focused event="tab.focus" subsystem="tab" outcome="ok" workspace_id="w1" tab_id="w1:t1"
+2026-07-17T05:04:51.384893Z  INFO herdr::server::headless: client disconnected client_id=2
+2026-07-17T05:04:53.006353Z  INFO herdr::logging: session saved event="persist.save" subsystem="persist" outcome="ok" path=/Users/noahbrauner/.config/herdr/session.json workspaces=1
+2026-07-17T05:22:50.921602Z  INFO herdr::logging: checking for updates event="update.check.start" subsystem="update" outcome="started"
