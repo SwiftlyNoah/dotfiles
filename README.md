@@ -8,12 +8,42 @@ One repo, one command, and a fresh Mac ends up configured the same way every tim
 Running the switch builds:
 
 - System settings (dark mode, key repeat, dock position/size, Finder, trackpad, menu bar clock)
-- Homebrew apps (casks and CLI tools)
-- Nix user packages (ripgrep, fd, fzf, jq, lazygit, Neovim, Hack Nerd Font)
 - Shell (zsh, aliases, starship prompt)
 - Editor (Neovim config with the rose-pine moon theme)
 - Terminal (WezTerm config with the rose-pine moon theme)
 - Agent configs (Claude, Codex, opencode all share one AGENTS.md)
+
+Every program it installs:
+
+**Nix user packages** (`home.nix`)
+
+- `ripgrep` - fast search
+- `fd` - fast find
+- `fzf` - fuzzy finder
+- `jq` - JSON on the command line
+- `lazygit` - terminal UI for git
+- `neovim` - editor
+- `nerd-fonts.hack` - the Hack Nerd Font everything renders in
+
+**Homebrew CLI tools** (`brews` in `configuration.nix`)
+
+- `herdr` - process/log herder
+- `cocoapods` - CocoaPods dependency manager
+- `fastlane` - iOS/Android build and release automation
+- `gh` - GitHub CLI
+- `node` - Node.js runtime
+- `nvm` - Node version manager
+- `php` - PHP runtime
+
+**Homebrew casks / GUI apps** (`casks` in `configuration.nix`)
+
+- `wezterm` - terminal emulator
+- `claude-code` - Claude Code
+- `1password` - password manager
+- `proxyman` - HTTP debugging proxy
+- `visual-studio-code` - VS Code editor
+- `xcodes-app` - Xcode version manager
+- `google-chrome` - web browser
 
 ## Prerequisites
 
@@ -76,7 +106,7 @@ No separate build-and-copy step.
 This repo is mine.
 If you clone it, review these before you run `bootstrap.sh`:
 
-- **Username**: run `./bootstrap.sh` (it detects your macOS username and offers to set it) OR change the single `user = "kunchen"` line in `flake.nix`.
+- **Username**: run `./bootstrap.sh` (it detects your macOS username and offers to set it) OR change the single `user = "noahbrauner"` line in `flake.nix`.
   Everything else (`configuration.nix`, `home.nix`, home directory paths) is threaded from that one variable.
 - **Host label** `"mac"`, in three places: `flake.nix` (the `darwinConfigurations."mac"` name), `rebuild.sh:5` (the `#mac` at the end of the flake reference), and `bootstrap.sh`'s first-switch command (also `#mac`).
   All three have to match.
