@@ -5,6 +5,17 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# Run this as your normal user, NOT with sudo. The script calls sudo itself only
+# for the darwin-rebuild activation (Step 4). Running the whole thing as root
+# makes whoami return "root" (corrupting Step 3's username rewrite) and makes root
+# fetch your user-owned git repo, which libgit2 refuses.
+if [ "$(id -u)" -eq 0 ]; then
+  echo "Do not run bootstrap.sh with sudo. Run it as your normal user:" >&2
+  echo "    ./bootstrap.sh" >&2
+  echo "It will prompt for your password when it needs root." >&2
+  exit 1
+fi
+
 echo "==> Step 1: Determinate Nix"
 if command -v nix >/dev/null 2>&1; then
   echo "    nix already installed, skipping"
@@ -53,10 +64,15 @@ echo "==> Step 4: first darwin-rebuild switch (pinned to nix-darwin-26.05)"
 # freshly installed `nix` would not be found under sudo even though it's
 # on PATH here. Resolve the absolute path first and invoke that instead.
 NIX_BIN="$(command -v nix)"
+# Use a "path:" flake ref, not the default git fetcher. nix-darwin (25.05+) runs
+# the whole switch as root, so root ends up fetching this user-owned git repo and
+# libgit2 rejects it ("repository path ... is not owned by current user"). "path:"
+# copies the working tree directly and skips git's ownership check entirely. It
+# also means untracked files are picked up without a commit first.
 # "mac" is the flake host label - if you renamed it, change it in flake.nix
 # and rebuild.sh too.
 sudo "$NIX_BIN" run github:nix-darwin/nix-darwin/nix-darwin-26.05#darwin-rebuild -- \
-  switch --flake ~/.dotfiles#mac
+  switch --flake "path:$DIR#mac"
 # If this still fails with "nix: command not found", open a new terminal
 # (Determinate adds nix to new shells' PATH) and re-run ./bootstrap.sh.
 

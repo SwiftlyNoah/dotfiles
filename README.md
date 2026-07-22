@@ -68,6 +68,10 @@ Change the host label or CPU architecture if needed, and read the Homebrew clean
 ./bootstrap.sh
 ```
 
+Run it as your normal user - **not** with `sudo`.
+It prompts for your password at the step that needs root, and refuses to start if you run the whole thing as root.
+(Under `sudo` it would read your username as `root` and write that into `flake.nix`, and root can't read a repo you own.)
+
 `bootstrap.sh` does four things, in order:
 
 1. Installs Determinate Nix, if it isn't already installed.
@@ -78,6 +82,22 @@ Change the host label or CPU architecture if needed, and read the Homebrew clean
    It fetches the `darwin-rebuild` tool from the nix-darwin 26.05 release branch, then applies this repo's locked flake config.
 
 After that, `darwin-rebuild` exists and you're on the normal workflow below.
+
+### Why the flake reference says `path:`
+
+Both scripts apply the config with `--flake "path:$DIR#mac"` rather than plain `~/.dotfiles#mac`.
+
+nix-darwin 25.05 and later run the entire switch as root, so root ends up reading this repo - which your user account owns.
+Git refuses that by default (the dubious-ownership check added for CVE-2022-24765), and the switch dies with `repository path ... is not owned by current user (libgit2 error code = 7)`.
+The `path:` prefix copies the working tree directly instead of going through Git's fetcher, so the ownership check never runs.
+
+This is worth knowing for two reasons:
+
+- It's why you don't need `git config --global --add safe.directory` or any root-owned checkout.
+  It's most likely to bite on a managed/corporate Mac, but the fix is unconditional and costs nothing on a personal one.
+- Untracked files are picked up without committing first.
+  With a Git flake reference, a brand new file is invisible to the build until you `git add` it.
+  With `path:`, whatever is on disk is what gets built - convenient day to day, but remember an experiment you forgot to revert is also live.
 
 ### Validate without applying
 
@@ -108,7 +128,7 @@ If you clone it, review these before you run `bootstrap.sh`:
 
 - **Username**: run `./bootstrap.sh` (it detects your macOS username and offers to set it) OR change the single `user = "noahbrauner"` line in `flake.nix`.
   Everything else (`configuration.nix`, `home.nix`, home directory paths) is threaded from that one variable.
-- **Host label** `"mac"`, in three places: `flake.nix` (the `darwinConfigurations."mac"` name), `rebuild.sh:5` (the `#mac` at the end of the flake reference), and `bootstrap.sh`'s first-switch command (also `#mac`).
+- **Host label** `"mac"`, in three places: `flake.nix` (the `darwinConfigurations."mac"` name), `rebuild.sh:12` (the `#mac` at the end of the flake reference), and `bootstrap.sh`'s first-switch command (also `#mac`).
   All three have to match.
 - **CPU architecture**, `hostPlatform` in `configuration.nix` (see Prerequisites above).
 
@@ -126,10 +146,26 @@ programs.git = {
 };
 ```
 
+**If you already have Homebrew installed:** `configuration.nix` sets `nix-homebrew.autoMigrate = true`.
+Without it, the switch stops with `/opt/homebrew seems to contain an existing copy of Homebrew` and makes you choose between uninstalling Homebrew by hand or enabling this setting.
+With it, nix-homebrew takes over the existing installation in place rather than erroring out.
+On a Mac that has never had Homebrew it does nothing.
+
 **Homebrew cleanup warning:** `configuration.nix` sets `homebrew.onActivation.cleanup = "zap"`.
 That means every time you switch, Homebrew removes any package or cask on your machine that isn't listed in the `brews` and `casks` arrays in `configuration.nix`.
 If you already have Homebrew stuff installed that isn't in that list, the first switch will uninstall it.
 Read through `brews` and `casks` before you run `bootstrap.sh` or `rebuild.sh` for the first time, and add anything you want to keep.
+
+Note that `autoMigrate` does **not** save you here, despite being described as keeping your installed packages.
+It preserves them through the migration itself, and then `zap` removes every one you didn't declare, moments later in the same switch.
+`brew leaves` lists the packages you installed deliberately (as opposed to dependencies pulled in behind them) - that's the list worth reviewing before the first switch.
+`zap` also discards a package's configuration and data, not just its binaries, so back up anything you care about (a `~/.gnupg` keyring, for instance) first.
+
+**If a switch ends with `brew bundle failed! 1 Brewfile dependency failed to install`:** check whether the package actually installed (`brew list --versions <name>`) before assuming the worst.
+Homebrew runs `brew cleanup` automatically when it hasn't run in 30 days, and it can do so *during* an install, deleting its own bootsnap compile cache out from under the running process.
+That surfaces as `No such file or directory @ rb_file_s_lstat - .../bootsnap/compile-cache-iseq/...` and marks the package as failed even though it poured successfully.
+Re-running `./rebuild.sh` clears it, since the cache is gone and gets rebuilt.
+To stop it recurring, set `environment.variables.HOMEBREW_NO_INSTALL_CLEANUP = "1";` in `configuration.nix` - at the cost of old versions accumulating until you run `brew cleanup` yourself.
 
 **About `herdr`:** it's in the `brews` list.
 It's a real public Homebrew formula (`brew info herdr` finds it in homebrew-core, no tap needed), so it will install fine.

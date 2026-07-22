@@ -38,6 +38,10 @@
   nix-homebrew = {
     enable = true;
     inherit user;
+    # Take ownership of a Homebrew that was installed the normal way, instead of
+    # erroring out. It replaces the existing installation but keeps the packages
+    # already installed. Harmless on a machine that has never had Homebrew.
+    autoMigrate = true;
   };
   homebrew = {
     enable = true;
