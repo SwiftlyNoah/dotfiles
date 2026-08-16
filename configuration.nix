@@ -35,6 +35,17 @@
     trackpad.Clicking = true;              # tap to click
     menuExtraClock.ShowSeconds = true;
   };
+
+  # Dev servers (Expo, Firebase emulator, Proxyman, Android emulator) all bind
+  # listening sockets. Stealth mode keeps them from answering probes on untrusted
+  # networks. blockAllIncoming stays false so localhost development still works.
+  networking.applicationFirewall = {
+    enable = true;
+    enableStealthMode = true;
+    blockAllIncoming = false;
+    allowSigned = true;
+    allowSignedApp = true;
+  };
   nix-homebrew = {
     enable = true;
     inherit user;
@@ -45,9 +56,15 @@
   };
   homebrew = {
     enable = true;
-    onActivation.cleanup = "zap";  # remove anything not listed here
+    # "zap" removes anything not listed below. That makes this list the single
+    # source of truth, so ANY new tool must be added here rather than installed
+    # with a bare `brew install` - otherwise the next rebuild deletes it.
+    onActivation.cleanup = "zap";
     onActivation.autoUpdate = true;
     onActivation.extraFlags = [ "--force" ];
+    taps = [
+      "facebook/fb"  # provides idb-companion
+    ];
     brews = [
       "herdr"
       "cocoapods"
@@ -56,6 +73,13 @@
       "node"
       "nvm"
       "php"
+      # --- reconciled 2026-08-16: installed on request but previously undeclared,
+      #     so `zap` would have removed them on the next rebuild.
+      "openjdk@21"                  # Java toolchain for Android/Gradle builds
+      "tectonic"                    # self-contained LaTeX engine
+      "poppler"                     # pdftotext/pdfimages CLI utilities
+      "cliclick"                    # scripted mouse/keyboard control
+      "facebook/fb/idb-companion"   # iOS device/simulator automation
     ];
     casks = [
       "wezterm"
@@ -65,6 +89,7 @@
       "visual-studio-code"
       "xcodes-app"
       "google-chrome"
+      "gcloud-cli"  # reconciled 2026-08-16: controls the red-black GCE solver fleet
     ];
   };
 }
