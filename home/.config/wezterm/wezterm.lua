@@ -17,14 +17,16 @@ config.hyperlink_rules = wezterm.default_hyperlink_rules()
 
 -- Absolute paths: /Users/me/thing.ts, optionally :line or :line:col
 table.insert(config.hyperlink_rules, {
-  regex = [[(?:^|[\s"'`(\[])(/[^\s"'`)\]]+\.[A-Za-z0-9_]+(?::\d+)?(?::\d+)?)]],
+  -- [==[ ]==] not [[ ]], because the character class below contains ]] and a
+  -- plain long bracket would end the string right there.
+  regex = [==[(?:^|[\s"'`(\[])(/[^\s"'`)\]]+\.[A-Za-z0-9_]+(?::\d+)?(?::\d+)?)]==],
   format = "openfile:$1",
   highlight = 1,
 })
 
 -- Repo-relative paths: lib/api/requestAPI.ts:142
 table.insert(config.hyperlink_rules, {
-  regex = [[(?:^|[\s"'`(\[])([\w.\-]+(?:/[\w.\-]+)+\.[A-Za-z0-9_]+(?::\d+)?(?::\d+)?)]],
+  regex = [==[(?:^|[\s"'`(\[])([\w.\-]+(?:/[\w.\-]+)+\.[A-Za-z0-9_]+(?::\d+)?(?::\d+)?)]==],
   format = "openfile:$1",
   highlight = 1,
 })
