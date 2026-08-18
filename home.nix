@@ -28,6 +28,17 @@ in
     syntaxHighlighting.enable = true;  # commands turn green when valid
     initContent = ''
       bindkey '^f' autosuggest-accept
+
+      # Tell the terminal which directory we are in (OSC 7), on every cd.
+      # WezTerm needs this to turn a repo-relative path like
+      # lib/api/requestAPI.ts:142 into something it can open - without it the
+      # terminal has no idea what the path is relative to, so only absolute
+      # paths are clickable. See the hyperlink_rules in
+      # home/.config/wezterm/wezterm.lua, which this pairs with.
+      _osc7_cwd() { printf '\e]7;file://%s%s\e\\' "$HOST" "$PWD"; }
+      autoload -Uz add-zsh-hook
+      add-zsh-hook chpwd _osc7_cwd
+      _osc7_cwd
     '';
     shellAliases = {
       ".." = "cd ..";
