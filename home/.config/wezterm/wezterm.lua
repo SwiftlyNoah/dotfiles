@@ -31,6 +31,24 @@ table.insert(config.hyperlink_rules, {
   highlight = 1,
 })
 
+-- Cmd-click opens a link. WezTerm's default is a PLAIN left click (SUPER is
+-- not bound at all out of the box), which is surprising on macOS and also
+-- means an accidental click on a path opens an editor. Binding Cmd makes it
+-- deliberate. The Down binding is a no-op so Cmd-click does not also start a
+-- text selection; plain click still selects, and still opens links.
+config.mouse_bindings = {
+  {
+    event = { Down = { streak = 1, button = "Left" } },
+    mods = "SUPER",
+    action = wezterm.action.Nop,
+  },
+  {
+    event = { Up = { streak = 1, button = "Left" } },
+    mods = "SUPER",
+    action = wezterm.action.OpenLinkAtMouseCursor,
+  },
+}
+
 wezterm.on("open-uri", function(window, pane, uri)
   local target = uri:match("^openfile:(.+)$")
   if not target then return true end
