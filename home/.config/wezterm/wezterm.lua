@@ -31,11 +31,22 @@ table.insert(config.hyperlink_rules, {
   highlight = 1,
 })
 
--- Cmd-click opens a link. WezTerm's default is a PLAIN left click (SUPER is
--- not bound at all out of the box), which is surprising on macOS and also
--- means an accidental click on a path opens an editor. Binding Cmd makes it
--- deliberate. The Down binding is a no-op so Cmd-click does not also start a
--- text selection; plain click still selects, and still opens links.
+-- Opening a link, and the multiplexer problem.
+--
+-- These rules only ever fire if WEZTERM sees the click. Inside Herdr they
+-- normally do not: Herdr defaults to mouse_capture = true and owns the mouse,
+-- and it has no plain-text link scanner of its own - it makes OSC 8
+-- hyperlinks clickable and nothing else. So a bare path printed by a program
+-- is not a link to Herdr, and the click never reaches WezTerm either.
+--
+-- SHIFT is the terminal-native bypass: holding it makes WezTerm handle the
+-- mouse itself instead of forwarding to the application. So inside Herdr the
+-- working gesture is Shift-click (or Shift-Cmd-click), and both are bound
+-- below. Outside Herdr, plain Cmd-click works too.
+--
+-- The Down bindings are Nops so these gestures do not also start a text
+-- selection. Plain click is left alone: it still selects, and WezTerm's
+-- default already opens links with it when nothing is captured.
 config.mouse_bindings = {
   {
     event = { Down = { streak = 1, button = "Left" } },
@@ -45,6 +56,16 @@ config.mouse_bindings = {
   {
     event = { Up = { streak = 1, button = "Left" } },
     mods = "SUPER",
+    action = wezterm.action.OpenLinkAtMouseCursor,
+  },
+  {
+    event = { Down = { streak = 1, button = "Left" } },
+    mods = "SHIFT|SUPER",
+    action = wezterm.action.Nop,
+  },
+  {
+    event = { Up = { streak = 1, button = "Left" } },
+    mods = "SHIFT|SUPER",
     action = wezterm.action.OpenLinkAtMouseCursor,
   },
 }
