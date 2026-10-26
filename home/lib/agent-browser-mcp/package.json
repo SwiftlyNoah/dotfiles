@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Pins Google's Chrome DevTools MCP for home/bin/agent-browser-mcp. Update with: npm install --package-lock-only chrome-devtools-mcp@<version>",
+  "dependencies": {
+    "chrome-devtools-mcp": "1.12.0"
+  }
+}

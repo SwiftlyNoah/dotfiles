@@ -1,0 +1,55 @@
+onboarding = false
+[keys]
+prefix = "ctrl+b"
+focus_pane_left  = "prefix+h"
+focus_pane_down  = "prefix+j"
+focus_pane_up    = "prefix+k"
+focus_pane_right = "prefix+l"
+split_horizontal = "prefix+double_quote"
+split_vertical    = "prefix+percent"
+new_tab   = "prefix+c"
+close_tab = "prefix+ampersand"
+workspace_picker = "prefix+w"
+goto             = "prefix+g"
+copy_mode  = "prefix+y"  # herdr's copy-mode entry key; copy-mode's own internal keys (v/space select, y/Enter copy, q/Esc cancel) aren't configurable
+
+[ui]
+# Agents panel order: explicit choice of "spaces" (grouped by space, the default) over "priority".
+agent_panel_sort = "spaces"
+show_agent_labels_on_pane_borders = true
+
+# One quiet line per agent: its state, space and tab. No second row repeating the agent
+# name ("claude" on every entry) or its task title (already in the pane itself).
+[ui.sidebar.agents]
+rows = [["state_icon", "workspace", "tab"]]
+
+# Ahead/behind counts (↓4) in Rosé Pine's subtle gray rather than alarm red: useful to
+# know, not urgent.
+[ui.sidebar.spaces]
+rows = [["state_icon", "workspace"], ["branch", { token = "git_status", fg = "#908caa" }]]
+
+# Two soft chimes of our own (sounds/synth.py makes them): one warm marimba note when an
+# agent finishes, and "Lilac", two quick notes falling, when one needs me. Lilac is also the
+# Mac's alert sound. Background spaces only.
+[ui.sound]
+enabled = true
+done_path = "sounds/done.mp3"
+request_path = "sounds/request.mp3"
+
+[theme]
+# herdr ships Rosé Pine main and Dawn but not Moon, which WezTerm's own variant builds on
+# (home/.config/wezterm/wezterm.lua). So: main as the base, Moon's palette on top
+# (rosepinetheme.com/palette), and the panels see-through to WezTerm's blurred background.
+name = "rose-pine"
+
+[theme.custom]
+panel_bg = "reset"
+sidebar_bg = "reset"
+active_row_bg = "#393552"  # overlay
+selection_bg = "#4a3f66"   # iris mixed into the ground, as WezTerm's selection
+text = "#cfcce0"           # a step softer, as WezTerm's Moon
+accent = "#c4a7e7"         # iris, like the prompt's ❯
+red = "#eb6f92"            # love
+yellow = "#f6c177"         # gold
+green = "#9ccfd8"          # foam
+blue = "#3e8fb0"           # pine

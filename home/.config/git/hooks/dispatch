@@ -1,0 +1,32 @@
+#!/bin/sh
+# Every git hook in every repo runs this first (core.hooksPath, set in home.nix), under the
+# hook's own name. It adds the checks that should apply everywhere, then hands over to the
+# repo's own hook of the same name, so per-repo hooks and Git LFS keep working.
+#
+# A repo that sets its own core.hooksPath (husky, for one) skips this file entirely.
+
+hook=$(basename "$0")
+
+if [ "$hook" = pre-commit ] && command -v gitleaks >/dev/null 2>&1; then
+  # Uses the repo's .gitleaks.toml when it has one. A false positive can be allowed with
+  # a `gitleaks:allow` comment on that line, or skipped once with `git commit --no-verify`.
+  if ! gitleaks git --pre-commit --staged --redact --verbose --no-banner --log-level warn; then
+    echo "gitleaks found what looks like a secret in the staged changes (above). Commit stopped." >&2
+    exit 1
+  fi
+fi
+
+repo_hook="$(git rev-parse --git-common-dir)/hooks/$hook"
+if [ -x "$repo_hook" ]; then
+  exec "$repo_hook" "$@"
+fi
+
+# Git LFS normally installs these four into each repo; run them here when a repo has none.
+case "$hook" in
+  post-checkout | post-commit | post-merge | pre-push)
+    if command -v git-lfs >/dev/null 2>&1 && git config --get-regexp '^filter\.lfs\.' >/dev/null 2>&1 &&
+      grep -qs 'filter=lfs' "$(git rev-parse --show-toplevel)/.gitattributes"; then
+      exec git lfs "$hook" "$@"
+    fi
+    ;;
+esac

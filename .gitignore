@@ -1,0 +1,16 @@
+# Claude Code's local state for this repo
+/.claude/
+
+# herdr writes logs, sockets, sessions and release notes into its config folder, which
+# home.nix links into this repo. Only the config and our chimes are tracked.
+home/.config/herdr/*
+!home/.config/herdr/config.toml
+!home/.config/herdr/sounds/
+
+# macOS and Nix build output
+.DS_Store
+result
+result-*
+
+# Your own settings: a clone of your private dotfiles-local repo (see local.example.json).
+/local/

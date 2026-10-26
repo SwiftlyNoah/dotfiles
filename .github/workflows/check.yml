@@ -1,0 +1,26 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-latest # Apple Silicon, the same platform as flake.nix's system
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      # Evaluates the whole Mac configuration and runs the lint check (flake.nix).
+      - run: nix flake check --print-build-logs
+      # Resolves every package the switch would install, without building it.
+      - run: nix build .#darwinConfigurations.mac.system --dry-run

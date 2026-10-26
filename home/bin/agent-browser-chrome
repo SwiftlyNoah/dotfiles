@@ -1,0 +1,23 @@
+#!/bin/zsh
+# Keeps one shared browser's Chrome running (main by default; see home/lib/agent-browser.zsh):
+# a launchd agent per browser (home.nix) runs this and restarts it whenever it exits, so a
+# Chrome that crashes, gets quit by accident or is relaunched for an update comes back on
+# its own within seconds.
+#
+#   agent-browser-chrome [id]   (an id from the local config's browsers)
+#
+# A Chrome started some other way may already hold the profile; then this waits for it to
+# go away instead of starting a second one on the same profile.
+emulate -L zsh
+setopt no_unset
+source "${0:A:h:h}/lib/agent-browser.zsh"
+agent_browser_instance "${1:-main}" || exit 1
+
+while agent_browser_running; do sleep 5; done
+
+agent_browser_prepare
+agent_browser_args
+# Through Launch Services in the background (-g), as a new instance beside mine (-n), and
+# waiting until it quits (-W) so launchd sees it running. A rebuild that reloads this job
+# stops only `open`: Chrome and the agents' tabs carry on, and the loop above waits for it.
+exec open -g -n -W -a "Google Chrome" --args "${reply[@]}"

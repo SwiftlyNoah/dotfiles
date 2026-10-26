@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Lilac Moon: Noah's setup, from the terminal and its sounds to the keyboard, desk mat and room, in one theme.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23c4a7e7'/%3E%3Cstop offset='1' stop-color='%23ea9a97'/%3E%3C/linearGradient%3E%3Cmask id='m'%3E%3Crect width='32' height='32' fill='%23fff'/%3E%3Ccircle cx='20' cy='12' r='11' fill='%23000'/%3E%3C/mask%3E%3C/defs%3E%3Ccircle cx='15' cy='17' r='12' fill='url(%23g)' mask='url(%23m)'/%3E%3C/svg%3E">
+<title>Lilac Moon</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+html, body { margin: 0; }
+/* Layout: a night-desk scene as the cover, then the setup's parts in one calm column: palette, screen, sound, desk, room. The page itself wears Lilac Moon. */
+:root {
+  --ground: #1f1d30; --surface: #2a273f; --overlay: #393552; --line: #44415a;
+  --text: #cfcce0; --bright: #e0def4; --subtle: #908caa; --muted: #6e6a86;
+  --iris: #c4a7e7; --rose: #ea9a97; --gold: #f6c177; --pine: #3e8fb0; --foam: #9ccfd8; --love: #eb6f92;
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --body: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--text); font-family: var(--body); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 72px; }
+.cover { display: grid; gap: 22px; }
+.cover-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 24px; }
+h1 { font-family: var(--display); font-weight: 300; font-size: clamp(44px, 8vw, 84px); line-height: .95; margin: 0; letter-spacing: -.02em; color: var(--bright); }
+h1 em { font-style: italic; color: var(--iris); font-weight: 300; }
+.kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); }
+.scene { border-radius: 22px; overflow: hidden; background: #17151f; }
+.scene svg { display: block; width: 100%; height: auto; }
+.lede { max-width: 62ch; color: var(--subtle); font-size: 18px; margin: 0; }
+section { display: grid; gap: 22px; }
+h2 { font-family: var(--display); font-weight: 500; font-size: clamp(26px, 3.6vw, 34px); margin: 0; color: var(--bright); letter-spacing: -.01em; text-wrap: balance; }
+.sub { color: var(--subtle); margin: 0; max-width: 64ch; }
+.palette { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; }
+.chip { display: grid; gap: 6px; }
+.chip span { display: block; height: 64px; border-radius: 12px; border: 1px solid var(--line); }
+.chip b { font-weight: 600; font-size: 14px; color: var(--bright); }
+.chip code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; align-items: start; }
+.two > * { min-width: 0; }
+figure { margin: 0; display: grid; gap: 10px; }
+figure img { width: 100%; border-radius: 14px; border: 1px solid var(--line); display: block; }
+figcaption { font-size: 14px; color: var(--subtle); }
+.term { border-radius: 14px; border: 1px solid var(--line); background: rgba(31,29,48,.92); font-family: var(--mono); font-size: 13.5px; line-height: 1.7; padding: 16px 18px; overflow-x: auto; }
+.term .dim { color: var(--muted); } .term .iris { color: var(--iris); } .term .foam { color: var(--foam); } .term .gold { color: var(--gold); } .term .rose { color: var(--rose); } .term .pine { color: var(--pine); }
+.term .sel { background: #4a3f66; color: var(--bright); }
+.term .cursor { display: inline-block; width: .6em; background: var(--subtle); color: transparent; }
+.sounds { display: flex; flex-wrap: wrap; gap: 12px; }
+.sound { display: flex; align-items: center; gap: 14px; padding: 14px 18px 14px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.sound:hover { border-color: var(--iris); }
+.sound:focus-visible { outline: 2px solid var(--iris); outline-offset: 3px; }
+.sound .play { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--overlay); color: var(--iris); flex: none; }
+.sound b { display: block; color: var(--bright); font-weight: 600; }
+.sound small { color: var(--subtle); font-size: 13px; }
+.list { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.item { display: grid; grid-template-columns: 1fr auto; gap: 4px 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.item > div { min-width: 0; }
+.item b { color: var(--bright); font-weight: 600; }
+.item p { margin: 2px 0 0; color: var(--subtle); font-size: 15px; }
+.item .price { font-family: var(--mono); font-size: 13px; color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.status { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px; }
+.status.have { background: #2d3b3f; color: var(--foam); }
+.status.ready { background: #3a3150; color: var(--iris); }
+a { color: var(--foam); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; border-radius: 3px; }
+footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 22px; }
+@media (prefers-reduced-motion: no-preference) { .twinkle { animation: tw 4.5s ease-in-out infinite; } @keyframes tw { 50% { opacity: .25; } } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <div class="cover">
+    <div class="cover-title"><h1>Lilac <em>Moon</em></h1><span class="kicker">Noah's setup · desk, screen, sound</span></div>
+    <div class="scene"><img src="desk-full-vision.jpg" alt="The full Lilac Moon desk at night, from the chair: a 34-inch ultrawide showing a moonlit pine lake, a lilac glow on the wall around it, a warm light bar lighting the desk and three moon prints above, and on the pine desk a black keyboard with purple legends and a lavender rose on Escape, a beech wrist rest and a starry lake desk mat" style="display:block;width:100%;height:auto"></div>
+    <p class="lede">One theme across everything I touch: Rosé Pine Moon, made my own. A deep purple-grey ground, soft lilac-grey text, lavender for what's mine, rose for warmth, and a crescent moon that shows up on the screen, the desk and the wall.</p>
+  </div>
+
+  <section>
+    <h2>The palette</h2>
+    <p class="sub">Rosé Pine Moon, with my own ground and text. Lavender marks selection and accents; rose and gold are used sparingly.</p>
+    <div class="palette">
+      <div class="chip"><span style="background:#1f1d30"></span><b>Ground</b><code>#1f1d30</code></div>
+      <div class="chip"><span style="background:#2a273f"></span><b>Surface</b><code>#2a273f</code></div>
+      <div class="chip"><span style="background:#cfcce0"></span><b>Text</b><code>#cfcce0</code></div>
+      <div class="chip"><span style="background:#c4a7e7"></span><b>Lilac</b><code>#c4a7e7</code></div>
+      <div class="chip"><span style="background:#ea9a97"></span><b>Rose</b><code>#ea9a97</code></div>
+      <div class="chip"><span style="background:#f6c177"></span><b>Gold</b><code>#f6c177</code></div>
+      <div class="chip"><span style="background:#9ccfd8"></span><b>Foam</b><code>#9ccfd8</code></div>
+      <div class="chip"><span style="background:#3e8fb0"></span><b>Pine</b><code>#3e8fb0</code></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>On screen</h2>
+    <div class="two">
+      <figure><img alt="The dynamic wallpaper at sunset: a still mountain lake in rose and purple, framed by pines, the sky mirrored in the water" src="wallpaper.jpg"><figcaption>The wallpaper follows the day: a lilac crescent over a pine lake at night, a peach dawn, soft lilac days, a rose sunset (here), then blue hour. A meteor at 3 a.m., and a cabin light on the far shore after dark.</figcaption></figure>
+      <div style="display:grid; gap:10px; min-width:0">
+        <div class="term" aria-label="Terminal in the Moon colors"><div><span class="dim">~/.dotfiles</span> <span class="pine">main</span> <span class="gold">!2</span></div><div><span class="iris">❯</span> <span class="sel">claude-pool</span></div><div class="dim">─────────────────────────────────────</div><div><span class="foam">●</span> Reading the build log, then the failing test…</div><div>&nbsp;</div><div><span class="dim">Opus 5.5 ·</span> <span class="iris">noah</span> <span class="dim">· ctx</span> <span class="foam">━━━━</span><span style="color:#56526e">──────────</span> <span class="dim">27%</span></div><div><span class="iris">❯</span> <span class="cursor">_</span></div></div>
+        <figcaption>WezTerm and herdr in Moon: translucent glass over the wallpaper, Maple Mono at 14.5, a quiet grey cursor and a lilac selection. VS Code wears Rosé Pine Moon, and Chrome too.</figcaption>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The sound</h2>
+    <p class="sub">Two soft chimes, made for this setup. One sound means "something needs me" everywhere: an agent with a question, and every macOS alert.</p>
+    <div class="sounds">
+      <button class="sound" id="snd-lilac" type="button"><span class="play" aria-hidden="true">▶</span><span><b>Lilac</b><small>Needs me · agents and the Mac's alert</small></span></button>
+      <button class="sound" id="snd-done" type="button"><span class="play" aria-hidden="true">▶</span><span><b>Done</b><small>An agent finished</small></span></button>
+    </div>
+  </section>
+
+  <section>
+    <h2>The desk</h2>
+    <div class="two">
+      <figure><img alt="Desk mat: the wallpaper's pine lake at midnight, a lavender-to-rose crescent over mountains and a far shoreline of pines, firs at both ends, moonlight on the water, and a small lilac moon signature" src="desk-mat.jpg"><figcaption>The desk mat, 90 × 40 cm, rendered by the same generator as the wallpaper: its midnight frame, widened. Open sky under the keyboard, the moon under the mouse, the lake under the wrists.</figcaption></figure>
+      <div class="list">
+        <div class="item"><div><b>Keychron Q1 Ultra 8K, Black, Silk POM Red</b><p>Black aluminum, double gasket, smooth linears: a soft, deep thock. Wireless to three devices.</p></div><span class="price"><a href="https://www.keychron.com/products/keychron-q1-ultra-8k-wireless-custom-mechanical-keyboard">$229.99</a></span></div>
+        <div class="item"><div><b>GMK CYL Purple on Black</b><p>Black keycaps with purple legends: the terminal, in keys. Made in Germany.</p></div><span class="price"><a href="https://www.gmk.net/shop/en/glarses-x-gmk-cyl-pob-purple-on-black-keycaps/fptk5114">$100.66</a></span></div>
+        <div class="item"><div><b>Capsmiths Lavender Rose</b><p>A lavender resin rose on Esc: the one lilac key.</p></div><span class="price"><a href="https://1upkeyboards.com/shop/keycaps/keycaps-keycaps/artisans/capsmiths-artisan-keycap-lavender-rose/">$25</a></span></div>
+        <div class="item"><div><b>Lilac Moon desk mat, 90 × 40 cm</b><p>Stitched edges; its back edge slides just under the monitor stand's feet.</p></div><span class="price"><a href="https://deskmat.io/upload">$39</a></span></div>
+        <div class="item"><div><b>NuPhy Twotone wrist rest, beech</b><p>Light wood to match the pine desk.</p></div><span class="price"><a href="https://nuphy.com/products/twotone-wrist-rest-65-75">$34</a></span></div>
+        <div class="item"><div><b>Twelve South BookArc, Space Grey</b><p>The MacBook stands up beside the monitor, with Insert H for the 14".</p></div><span class="price"><a href="https://www.twelvesouth.com/products/bookarc-space-grey-macbook-pro">$19.98</a></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The room</h2>
+    <figure><img src="desk-full-vision-above.jpg" alt="The same desk from above and to the right: the lilac wall glow, the warm pool of the light bar on the pine, the keyboard, wrist rest and mouse on the lake desk mat, the MacBook in its stand and a marimo jar" style="width:100%;border-radius:14px;border:1px solid var(--line)"><figcaption>From above. Rendered to scale from photos of the real desk: real sizes, real light.</figcaption></figure>
+    <div class="list">
+      <div class="item"><div><b>BenQ ScreenBar Halo 2</b><p>Warm light on the desk, about 2700 K, and its rear backlight washing the wall above the monitor, which is what lights the prints.</p></div><span class="price"><a href="https://www.amazon.com/dp/B0DK59YKRS">≈ $179</a></span></div>
+      <div class="item"><div><b>Hue Play light bar</b><p>Behind the monitor: a lilac glow up the wall and around the screen.</p></div><span class="price"><a href="https://www.philips-hue.com/en-us/p/hue-white-and-color-ambiance-play-light-bar-single-pack/7820130U7">$98.99</a></span></div>
+      <div class="item"><div><b>Moon triptych</b><p>Dawn, sunset and night from the dynamic wallpaper: three 8-inch tiles hung 15 cm above the monitor.</p></div><span class="price"><a href="https://create.mixtiles.com/personal-photo-tiles">≈ $60</a></span></div>
+      <div class="item"><div><b>A marimo moss ball</b><p>A tiny green orb in a glass jar, in the back-right corner.</p></div><span class="price">≈ $10</span></div>
+    </div>
+  </section>
+
+  <footer>Lilac Moon lives in my <a href="https://github.com/SwiftlyNoah/dotfiles">dotfiles</a>: the terminal, the chimes and the Mac's settings are all declared there.</footer>
+</div>
+
+<script>
+// Sounds: play on click (the viewer only allows audio after an interaction).
+const SOUNDS = { lilac: "lilac.mp3", done: "done.mp3" };
+for (const name of Object.keys(SOUNDS)) {
+  const audio = new Audio(SOUNDS[name]);
+  document.getElementById("snd-" + name).addEventListener("click", () => { audio.currentTime = 0; audio.play().catch(() => {}); });
+}
+
+</script>
+
+</body>
+</html>

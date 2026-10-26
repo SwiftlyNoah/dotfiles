@@ -1,0 +1,9 @@
+{
+  "browsers": [
+    { "id": "main", "name": "Agent Browser", "port": 9333 }
+  ],
+  "chromeProfiles": [],
+  "workRepos": [],
+  "claudeSettings": null,
+  "deployDays": []
+}
