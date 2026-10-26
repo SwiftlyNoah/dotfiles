@@ -1,0 +1,84 @@
+#!/bin/zsh
+# Keeps this Mac on the latest versions of everything.
+#
+#   mac-update               pull the dotfiles, rebuild (Touch ID), update every package
+#                            manager, then run mac-check
+#   mac-update --packages    only the package managers (bootstrap.sh runs this)
+#   mac-update --scheduled   what the daily launchd job runs (home.nix): the package
+#                            managers, then a notification saying what changed and whether
+#                            a rebuild is waiting for you
+#
+# Package managers: Homebrew formulae and casks, the global npm CLIs below, and uv's
+# Pythons. Nix packages (Node, Python and the CLI tools) move forward through flake.lock, which a daily GitHub Action
+# updates, checks and pushes; a rebuild applies it. macOS, Chrome, VS Code, 1Password and
+# Claude Code update themselves.
+emulate -L zsh
+setopt err_exit no_unset pipe_fail
+export HOMEBREW_NO_ENV_HINTS=1
+export PATH="$HOME/.npm-global/bin:/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+# Global npm CLIs, always at their latest release. They move faster than nixpkgs does.
+readonly -a NPM_GLOBALS=(eas-cli firebase-tools vercel)
+
+# Deploy days ("deployDays" in the local config, as YYYY-MM-DD): the scheduled run upgrades
+# nothing, so firebase and eas can't change under a release. It catches up the next
+# morning; running mac-update by hand always upgrades. Past dates can be deleted whenever.
+source "${0:A:h:h}/lib/local-config.zsh"
+readonly -a DEPLOY_DAYS=(${(f)"$(local_config '.deployDays[]')"})
+
+readonly REPO="$HOME/.dotfiles"
+mode=${1:-full}
+
+notify() { command -v terminal-notifier >/dev/null && terminal-notifier -title "mac-update" -group mac-update -message "$1"; }
+
+if [[ $mode == --scheduled ]] && (( ${DEPLOY_DAYS[(Ie)$(date +%F)]} )); then
+  notify "Deploy day: no upgrades today. They run tomorrow, or now with mac-update."
+  exit 0
+fi
+# A snapshot of every version, to say what changed. Each source may be empty (npm ls
+# exits 1 with no globals installed yet), and that must not stop the run.
+versions() {
+  brew list --versions || true
+  { npm ls -g --depth=0 --parseable --long 2>/dev/null || true; } | awk -F: 'NR > 1 { print $2 }'
+  { uv python list --only-installed --managed-python 2>/dev/null || true; } | awk '{ print $1 }'
+}
+
+# 1. The dotfiles. A rebuild needs Touch ID, so the scheduled run only says when one waits.
+git -C "$REPO" fetch --quiet origin main 2>/dev/null || true
+behind=$(git -C "$REPO" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
+if [[ $mode == full ]]; then
+  print -- "==> Pulling dotfiles"
+  git -C "$REPO" pull
+  print -- "==> Rebuilding"
+  "$REPO/rebuild.sh"
+fi
+
+# 2. Package managers.
+before=$(versions)
+
+print -- "==> Homebrew"
+brew update --quiet
+export HOMEBREW_NO_AUTO_UPDATE=1 # just updated
+brew upgrade --formula
+brew upgrade --cask # casks that update themselves (Chrome, VS Code, 1Password) are skipped
+
+print -- "==> npm globals"
+npm install --global --no-fund --no-audit --loglevel=error ${^NPM_GLOBALS}@latest
+
+print -- "==> uv Pythons"
+uv python install 3.14
+uv python upgrade
+
+after=$(versions)
+changed=(${(f)"$(comm -13 <(print -r -- $before | sort -u) <(print -r -- $after | sort -u))"})
+print -- "Updated: ${(j:, :)changed:-nothing}"
+
+if [[ $mode == --scheduled ]]; then
+  (( ${#changed} )) && notify "Updated ${#changed}: ${(j:, :)changed}"
+  (( behind > 0 )) && notify "$behind dotfiles update(s) waiting, including Nix packages. Run mac-update."
+fi
+
+if [[ $mode == full ]]; then
+  print
+  "$REPO/home/bin/mac-check" || true
+fi

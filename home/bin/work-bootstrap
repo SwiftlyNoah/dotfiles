@@ -1,0 +1,40 @@
+#!/bin/zsh
+# Gets a Mac ready for work: clones (or updates) each repo under "workRepos" in the local
+# config, then runs that repo's own setup script, which knows its layout and owns the rest
+# (environments, sign-ins, background jobs). Run it after bootstrap.sh; safe to run again.
+#
+# Each entry: "repo" (owner/name on GitHub), "dir" (where it lives), "setup" (its setup
+# script, relative to the repo) and optionally "update" (what to run instead of cloning
+# when it's already here).
+#
+# It copies no credentials: every sign-in happens in a browser, approved by a person.
+emulate -L zsh
+setopt err_exit no_unset pipe_fail
+export PATH="$HOME/.npm-global/bin:/etc/profiles/per-user/$USER/bin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+source "${0:A:h:h}/lib/local-config.zsh"
+
+if ! gh auth status >/dev/null 2>&1; then
+  print -- "Sign in to GitHub first (gh auth login), then run work-bootstrap again."
+  exit 1
+fi
+
+local -a repos=(${(f)"$(local_config '.workRepos[] | [.repo, .dir, .setup, .update // ""] | @tsv')"})
+(( ${#repos} )) || { print -- "No workRepos in the local config: nothing to set up."; exit 0; }
+
+for line in $repos; do
+  local -a f=("${(@ps:\t:)line}")
+  repo=${f[1]} dir=$(local_path ${f[2]}) setup=${f[3]} update=${f[4]-}
+  if [[ -d $dir/.git ]]; then
+    print -- "==> Updating $dir"
+    if [[ -n $update ]]; then "$dir/$update"; else git -C "$dir" pull --rebase --autostash; fi
+  else
+    print -- "==> Cloning $repo into $dir"
+    mkdir -p "${dir:h}"
+    gh repo clone "$repo" "$dir" -- --recurse-submodules
+  fi
+  if [[ ! -x $dir/$setup ]]; then
+    print -- "$repo has no $setup yet, so its setup stops here."
+    exit 1
+  fi
+  "$dir/$setup"
+done

@@ -1,0 +1,79 @@
+#!/bin/zsh
+# MCP server for the browsers Claude sessions share, whatever account they run on.
+#
+# Google's Chrome DevTools MCP, attached to a dedicated Chrome profile (never the personal
+# one) that is signed in to its sites once, by hand. A launchd agent keeps each of those
+# Chromes running (home/bin/agent-browser-chrome), so every session drives the same
+# signed-in browser. There can be several (home/lib/agent-browser.zsh), and the session's
+# folder picks one: a browser's "folder" in the local config takes the sessions under it,
+# and main takes the rest. Claude Code starts a stdio MCP server in the session's folder.
+#
+#   agent-browser-mcp [id]   (an id overrides the folder)
+emulate -L zsh
+setopt err_exit no_unset pipe_fail
+zmodload zsh/system
+source "${0:A:h:h}/lib/agent-browser.zsh"
+
+instance=${1:-$(agent_browser_for $PWD)}
+agent_browser_instance $instance
+
+up() { curl -fsS --max-time 1 "http://127.0.0.1:$PORT/json/version" >/dev/null 2>&1; }
+
+# The version lives in ../lib/agent-browser-mcp/package-lock.json. It is installed once per
+# lockfile into its own folder, shared by both browsers, and run directly: `npx` asks the
+# npm registry on every start, which is slow enough that a session can give up on the
+# server before it is ready.
+readonly PIN="${0:A:h:h}/lib/agent-browser-mcp"
+readonly SHARED="$HOME/.local/share/agent-browser"
+readonly MCP_DIR="$SHARED/mcp-$(shasum -a 256 "$PIN/package-lock.json" | cut -c1-12)"
+readonly MCP_BIN="$MCP_DIR/node_modules/.bin/chrome-devtools-mcp"
+
+# Sessions often start together (a pool switch restarts every one of them). The lock makes
+# them take turns, so only one starts a Chrome or installs the server. The kernel drops it
+# if this process dies, so it can never go stale.
+mkdir -p "$SHARED"
+touch "$SHARED/.lock"
+zsystem flock -t 120 -f lock_fd "$SHARED/.lock"
+
+# Chrome updates itself on disk while it runs, and the running copy then can't start a
+# renderer for any new tab (every new page hangs, old tabs keep working). So when the
+# version on disk has moved on, quit it cleanly (the profile and its sign-ins survive;
+# open tabs close) and let the start below bring up the new one.
+if up; then
+  running=$(curl -fsS --max-time 1 "http://127.0.0.1:$PORT/json/version" |
+    sed -nE 's/.*"Browser": *"[^/]*\/([^"]+)".*/\1/p')
+  on_disk=$(defaults read "/Applications/Google Chrome.app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || true)
+  if [[ -n $running && -n $on_disk && $running != "$on_disk" ]]; then
+    print -u2 -- "agent-browser: relaunching the $instance Chrome $running as $on_disk"
+    agent_browser_quit
+  fi
+fi
+
+if ! up; then
+  if launchctl print "gui/$UID/$LABEL" >/dev/null 2>&1; then
+    # Start it now rather than after launchd's restart delay.
+    launchctl kickstart "gui/$UID/$LABEL"
+  else
+    # Before the first rebuild that adds the launchd agent. Started through Launch
+    # Services, so it outlives the session that started it.
+    agent_browser_prepare
+    agent_browser_args
+    open -gna "Google Chrome" --args "${reply[@]}"
+  fi
+  for _ in {1..100}; do up && break; sleep 0.2; done
+  up || { print -u2 -- "agent-browser: the $instance Chrome did not start on port $PORT"; exit 1; }
+fi
+
+if [[ ! -x $MCP_BIN ]]; then
+  rm -rf "$MCP_DIR"
+  mkdir -p "$MCP_DIR"
+  cp "$PIN/package.json" "$PIN/package-lock.json" "$MCP_DIR/"
+  npm ci --prefix "$MCP_DIR" --no-fund --no-audit --loglevel=error >&2
+fi
+
+zsystem flock -u $lock_fd
+
+# Through background.mjs, so agents' pages never come in front of my apps. No usage
+# statistics, and no page URLs sent to Google's field-data service.
+exec node "$PIN/background.mjs" "$MCP_BIN" \
+  --browserUrl "http://127.0.0.1:$PORT" --no-usage-statistics --no-performance-crux

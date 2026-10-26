@@ -1,0 +1,35 @@
+{
+    "workbench.colorTheme": "Rosé Pine Moon",
+    "window.autoDetectColorScheme": true,
+    "workbench.preferredDarkColorTheme": "Rosé Pine Moon",
+    "workbench.preferredLightColorTheme": "Rosé Pine Dawn",
+    "editor.fontFamily": "'Maple Mono NF', ui-monospace, monospace",
+    "editor.fontSize": 14,
+    "terminal.integrated.fontFamily": "'Maple Mono NF'",
+    "git.enableSmartCommit": true,
+    "terminal.integrated.inheritEnv": false,
+    "explorer.confirmDragAndDrop": false,
+    "explorer.confirmDelete": false,
+    "claudeCode.preferredLocation": "panel",
+    "github.copilot.nextEditSuggestions.enabled": true,
+    "chat.viewSessions.orientation": "stacked",
+    "workbench.colorCustomizations": {
+        "[Rosé Pine Moon]": {
+            "editor.background": "#1f1d30",
+            "editor.foreground": "#cfcce0",
+            "terminal.background": "#1f1d30",
+            "terminal.foreground": "#cfcce0",
+            "panel.background": "#1f1d30",
+            "sideBar.background": "#1f1d30",
+            "activityBar.background": "#1f1d30",
+            "editorGroupHeader.tabsBackground": "#1f1d30",
+            "tab.inactiveBackground": "#1f1d30",
+            "titleBar.activeBackground": "#1f1d30",
+            "statusBar.background": "#1f1d30",
+            "editorCursor.foreground": "#908caa",
+            "terminalCursor.foreground": "#908caa",
+            "editor.selectionBackground": "#4a3f66",
+            "terminal.selectionBackground": "#4a3f66"
+        }
+    }
+}

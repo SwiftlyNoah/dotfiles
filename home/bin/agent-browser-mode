@@ -1,0 +1,61 @@
+#!/bin/zsh
+# Shows a shared browser to me, or puts it back out of sight (see home/lib/agent-browser.zsh).
+#
+#   agent-browser-mode <id> show   open its window in front of me (its launcher app)
+#   agent-browser-mode <id> hide   back to headless (Hammerspoon, once I'm done)
+#
+# A browser that runs headless can't just show a window: Chrome has to restart with
+# windows, on the same profile. Its sign-ins and open tabs carry over, and agents using it
+# reconnect to the same port on their next call.
+emulate -L zsh
+setopt err_exit no_unset pipe_fail
+source "${0:A:h:h}/lib/agent-browser.zsh"
+agent_browser_instance "${1:?usage: agent-browser-mode <id> <show|hide>}"
+
+up() { curl -fsS --max-time 1 "http://127.0.0.1:$PORT/json/version" >/dev/null 2>&1; }
+
+# Restarts its Chrome in whichever mode agent_browser_headless now says: Chrome quits
+# cleanly (its tabs and session cookies come back), and launchd starts it again right
+# away instead of after its restart delay.
+restart() {
+  agent_browser_quit
+  launchctl kickstart -k "gui/$UID/$LABEL"
+  for _ in {1..100}; do up && return 0; sleep 0.2; done
+  print -u2 -- "agent-browser: the $1 Chrome did not come back on port $PORT"
+  return 1
+}
+
+running_headless() {
+  local pid=$(agent_browser_pid)
+  [[ -n $pid ]] && ps -o command= -p $pid | grep -q -- '--headless'
+}
+
+case ${2:?usage: agent-browser-mode <id> <show|hide>} in
+  show)
+    touch "$STATE/visible"
+    if running_headless || ! up; then
+      restart $1
+      sleep 2 # its restored tabs come back
+    fi
+    # Bringing one of its tabs forward brings this Chrome, and only this one, to the front:
+    # the tab it shows (restored, or an agent's), or a new one when it has none.
+    page=$(curl -fsS "http://127.0.0.1:$PORT/json/list" | jq -r '[.[] | select(.type == "page")][0].webSocketDebuggerUrl // empty')
+    if [[ -n $page ]]; then
+      PATH="/etc/profiles/per-user/$USER/bin:$PATH" node --input-type=module -e '
+        const ws = new WebSocket(process.argv[1]);
+        ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: "Page.bringToFront" }));
+        ws.onmessage = () => process.exit(0);
+        setTimeout(() => process.exit(1), 5000);' "$page"
+    else
+      curl -fsS -X PUT "http://127.0.0.1:$PORT/json/new?chrome://newtab/" >/dev/null
+    fi
+    ;;
+  hide)
+    rm -f "$STATE/visible"
+    if [[ -e $CONFIG/headless ]] && ! running_headless; then restart $1; fi
+    ;;
+  *)
+    print -u2 -- "usage: agent-browser-mode <id> <show|hide>"
+    exit 2
+    ;;
+esac

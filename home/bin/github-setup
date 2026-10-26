@@ -1,0 +1,44 @@
+#!/bin/zsh
+# Connects this Mac to GitHub: a GitHub sign-in (git pushes over HTTPS through it), and an
+# SSH key of this Mac's own, registered for commit signing so commits from here show as
+# Verified. Each step checks first, so it is safe to run again. bootstrap.sh runs it.
+#
+# The key is this Mac's alone and never leaves it. A new Mac makes its own key and
+# registers it the same way, so nothing secret has to travel between machines.
+emulate -L zsh
+setopt err_exit no_unset pipe_fail
+export PATH="/etc/profiles/per-user/$USER/bin:/opt/homebrew/bin:$PATH"
+
+readonly KEY="$HOME/.ssh/id_ed25519"
+readonly SIGNERS="$HOME/.ssh/allowed_signers"
+email=$(git config --get user.email)
+title="$(scutil --get ComputerName) ($(date +%Y-%m))"
+
+print -- "==> SSH key"
+if [[ ! -f $KEY ]]; then
+  mkdir -p -m 700 "${KEY:h}"
+  ssh-keygen -q -t ed25519 -N "" -C "$email" -f "$KEY"
+  print -- "  created $KEY"
+else
+  print -- "  $KEY exists"
+fi
+pub=$(cut -d' ' -f1,2 "$KEY.pub")
+
+# Lets `git log --show-signature` confirm commits signed on this Mac.
+print -r -- "$email $pub" >"$SIGNERS"
+
+print -- "==> GitHub sign-in"
+if ! gh auth status >/dev/null 2>&1; then
+  [[ -t 0 ]] || { print -u2 -- "Not signed in to GitHub. Run github-setup in a terminal to sign in."; exit 1; }
+  gh auth login --web --git-protocol https --scopes admin:ssh_signing_key
+fi
+gh auth status 2>&1 | grep -q admin:ssh_signing_key ||
+  gh auth refresh --hostname github.com --scopes admin:ssh_signing_key
+
+print -- "==> Key on GitHub"
+registered() { gh api "$1" --paginate --jq '.[].key' | cut -d' ' -f1,2 | grep -qxF -- "$pub"; }
+if registered user/ssh_signing_keys; then
+  print -- "  registered for signing"
+else
+  gh ssh-key add "$KEY.pub" --type signing --title "$title (signing)"
+fi
