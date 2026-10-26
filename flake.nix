@@ -13,7 +13,7 @@
     # workflow moves this to Homebrew's latest release. (Its store path still says 7.0.4:
     # nix-homebrew names the build after its own pin, whatever source it gets.)
     brew-src = {
-      url = "github:Homebrew/brew/7.0.10";
+      url = "github:Homebrew/brew/7.0.11";
       flake = false;
     };
     nix-homebrew.inputs.brew-src.follows = "brew-src";
