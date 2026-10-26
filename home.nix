@@ -106,9 +106,9 @@ in
     fi
   '';
 
-  # The menu bar, left to right: Maccy, Amphetamine, Noah's Pool, Time Machine, Now
-  # Playing, Wi-Fi, Battery, Control Center, Clock. macOS 27 keeps the order here, as each
-  # item's distance from the right edge, and rewrites it when an icon is ⌘-dragged.
+  # The menu bar, left to right: Maccy, Amphetamine, Noah's Pool, Now Playing, Wi-Fi,
+  # Battery, Control Center, Clock. macOS 27 keeps the order here, as each item's distance
+  # from the right edge, and rewrites it when an icon is ⌘-dragged.
   # (configuration.nix can't write it: nix-darwin splits the path at its space.)
   home.activation.menuBarOrder = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     menubar="${config.home.homeDirectory}/Library/Group Containers/com.apple.MenuBar/Library/Preferences/com.apple.MenuBar"
@@ -118,7 +118,6 @@ in
       module:Battery -float 200 \
       module:WiFi -float 225 \
       module:NowPlaying -float 250 \
-      status:com.apple.systemuiserver::com.apple.menuextra.TimeMachine -float 275 \
       status:NoahsPool::Item-0 -float 300 \
       status:com.if.Amphetamine::Amphetamine -float 340 \
       status:org.p0deje.Maccy::Item-0 -float 380

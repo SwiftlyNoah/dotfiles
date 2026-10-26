@@ -103,14 +103,20 @@
         };
 
         # The menu bar's order is in home.nix (home.activation.menuBarOrder). Siri,
-        # Bluetooth, Focus, AltTab and Hammerspoon stay out of it: all are reached by
-        # keyboard or Control Center. (LuLu's icon is its own No Icon Mode setting: its
+        # Bluetooth, Focus, Time Machine, AltTab and Hammerspoon stay out of it: all are
+        # reached by keyboard, Control Center or System Settings. (LuLu's icon is its own No Icon Mode setting: its
         # system extension keeps the preferences and overwrites edits made from outside.)
         "com.apple.controlcenter" = {
           "NSStatusItem VisibleCC Bluetooth" = false;
           "NSStatusItem VisibleCC FocusModes" = false;
         };
         "com.apple.Siri".StatusMenuVisible = false;
+        # Time Machine's item is both of these; SystemUIServer saves its own copy when it
+        # quits, so a change made by hand needs `killall -KILL SystemUIServer` to stick.
+        "com.apple.systemuiserver" = {
+          menuExtras = [ ];
+          "NSStatusItem VisibleCC com.apple.menuextra.TimeMachine" = false;
+        };
         "com.lwouis.alt-tab-macos".menubarIconShown = "false"; # AltTab keeps its settings as strings
       };
     };
