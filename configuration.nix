@@ -117,7 +117,12 @@
           menuExtras = [ ];
           "NSStatusItem VisibleCC com.apple.menuextra.TimeMachine" = false;
         };
-        "com.lwouis.alt-tab-macos".menubarIconShown = "false"; # AltTab keeps its settings as strings
+        # AltTab keeps its settings as strings.
+        "com.lwouis.alt-tab-macos" = {
+          menubarIconShown = "false";
+          # The window under the pointer is the one ⌘Tab switches to on release.
+          mouseHoverEnabled = "true";
+        };
       };
     };
   };

@@ -1,9 +1,10 @@
 -- App hotkeys. Each opens or focuses its app, and when that app is already in front,
--- moves to its next window: ⌘⇧A again and again steps through Chrome's profile windows.
+-- moves to its next window: ⌘⇧A again and again steps through Chrome's windows.
 -- ⌘⇧Space stays unbound: macOS keeps it for the Screenshot app's visual intelligence.
 --
 -- Your own parts come from the local config (home/lib/local-config.zsh): the shared
--- browsers, and "chromeProfiles", a ⌘⇧ key for each Chrome profile of yours.
+-- browsers, and "chromeProfiles", a ⌘⇧ key for each Chrome profile of yours (one on A
+-- takes ⌘⇧A for that profile's windows only).
 
 -- First, so the `hs` command line tool (inside Hammerspoon.app) works even if a later line fails.
 require("hs.ipc")
@@ -29,10 +30,12 @@ end
 -- visit every window instead of bouncing between two. False when there is nowhere to go.
 local function cycle(windows, current)
   if #windows < 2 or not current then return false end
-  table.sort(windows, function(a, b) return a:id() < b:id() end)
-  for i, w in ipairs(windows) do
+  -- A sorted copy: callers keep their front-to-back order for when this returns false.
+  local sorted = { table.unpack(windows) }
+  table.sort(sorted, function(a, b) return a:id() < b:id() end)
+  for i, w in ipairs(sorted) do
     if w:id() == current:id() then
-      windows[i % #windows + 1]:focus()
+      sorted[i % #sorted + 1]:focus()
       return true
     end
   end
@@ -124,10 +127,12 @@ end
 -- Reachable from the `hs` tool, to check them without pressing keys.
 Hotkeys = { chrome = chrome, chromeProfile = chromeProfile, personalChrome = personalChrome, profileWindows = profileWindows }
 
-hs.hotkey.bind({ "cmd", "shift" }, "A", chrome)
+local profileKeys = {}
 for _, profile in ipairs(localConfig.chromeProfiles) do
+  profileKeys[profile.key] = true
   hs.hotkey.bind({ "cmd", "shift" }, profile.key, function() chromeProfile(profile) end)
 end
+if not profileKeys.A then hs.hotkey.bind({ "cmd", "shift" }, "A", chrome) end
 for key, bundleID in pairs(apps) do
   hs.hotkey.bind({ "cmd", "shift" }, key, function()
     local front = hs.application.frontmostApplication()
