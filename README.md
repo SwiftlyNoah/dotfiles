@@ -156,7 +156,7 @@ on [`local.example.json`](local.example.json), and copying that to `local/config
 fine way to start.
 
 - **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port, and
-  the folder whose sessions use it), a `⌘⇧` key for each of your Chrome profiles
+  the `folders` whose sessions use it; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
   (`chromeProfiles`), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
   file every session starts with (`claudeSettings`), and the dates `mac-update` leaves
   alone (`deployDays`).
@@ -248,8 +248,8 @@ of that:
   [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) to a Chrome
   with its own profile, so every agent session, on any account, drives the same signed-in
   browser and I sign in to things once, by hand. There can be one per part of your life,
-  and the session's folder picks one: say, a school browser for sessions under your class
-  folder, and a work one for the rest (`browsers` in your own settings). That keeps one
+  and the session's folder picks one: say, a work browser for sessions in your work repos,
+  and a personal one for everything else (`browsers` in your own settings). That keeps one
   context's sign-ins away from agents doing another's work, and each Google account in its
   own browser. 1Password fills passwords, only after I approve with Touch ID. A launchd job keeps each Chrome running (and relaunches it after Chrome updates
   itself); the profiles are readable only by me and kept out of Time Machine. Both are

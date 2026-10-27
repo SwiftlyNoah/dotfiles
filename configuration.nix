@@ -210,6 +210,7 @@
       "tidy-html5" # HTML checks
       "cliclick" # scripted mouse and keyboard control
       "terminal-notifier" # macOS notifications from scripts (mac-check, mac-update)
+      "xcodegen" # generates the claude-pool iOS app's Xcode project
     ]
     # These build against the full Xcode app, so a Mac without it yet leaves them out.
     ++ lib.optionals xcode [
@@ -233,6 +234,7 @@
       "lulu"
       "blockblock"
       "oversight"
+      "tailscale-app" # private network, so the claude-pool iOS app reaches this Mac's sessions over SSH
     ];
   };
 }

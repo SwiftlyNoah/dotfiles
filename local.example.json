@@ -2,6 +2,7 @@
   "browsers": [
     { "id": "main", "name": "Agent Browser", "port": 9333 }
   ],
+  "defaultBrowser": "main",
   "chromeProfiles": [],
   "workRepos": [],
   "claudeSettings": null,

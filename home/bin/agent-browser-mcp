@@ -5,8 +5,8 @@
 # one) that is signed in to its sites once, by hand. A launchd agent keeps each of those
 # Chromes running (home/bin/agent-browser-chrome), so every session drives the same
 # signed-in browser. There can be several (home/lib/agent-browser.zsh), and the session's
-# folder picks one: a browser's "folder" in the local config takes the sessions under it,
-# and main takes the rest. Claude Code starts a stdio MCP server in the session's folder.
+# folder picks one: a browser's "folders" in the local config take the sessions under them,
+# and "defaultBrowser" (main if unset) takes the rest. Claude Code starts a stdio MCP server in the session's folder.
 #
 #   agent-browser-mcp [id]   (an id overrides the folder)
 emulate -L zsh
