@@ -3,7 +3,8 @@
 # Each is its own Chrome, with its own profile and debugging port, so what one is signed in
 # to never reaches agents driving the other. They are listed under "browsers" in your local
 # config (home/lib/local-config.zsh): an id, the name of its launcher app, its port, and
-# optionally the folder whose sessions use it. "main" is the one for every other session.
+# optionally "folders", whose sessions use it. "defaultBrowser" (main if unset) takes every
+# other session.
 #
 # The debugging ports listen on 127.0.0.1 only and have no authentication, so any program
 # running on this Mac could drive these profiles. That is the accepted price of a browser
@@ -44,13 +45,13 @@ agent_browser_instance() {
   return 0
 }
 
-# The browser for a folder: the one whose "folder" holds it, or main.
+# The browser for a folder: the one with a "folders" entry holding it, or the default.
 agent_browser_for() {
   local id folder
-  for id folder in ${(f)"$(local_config '.browsers[] | select(.folder) | .id, .folder')"}; do
+  for id folder in ${(f)"$(local_config '.browsers[] | .id as $id | (.folders // [])[] | $id, .')"}; do
     [[ ${1:A}/ == ${$(local_path $folder):A}/* ]] && { print -r -- $id; return; }
   done
-  print main
+  print -r -- "$(local_config '.defaultBrowser // "main"')"
 }
 
 # Whether it should run headless right now: it opts in, and I haven't opened it to look.

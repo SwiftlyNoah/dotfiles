@@ -33,11 +33,20 @@ a dedicated Chrome profile signed in to the sites I work in. Use it for all web 
 
 ## Files you make for me
 
-Images, PDFs, renders, reports and documents meant for me go in
-`~/Documents/Claude/<project>/` (for example `~/Documents/Claude/Lilac Moon/`), with a
-clear name. Never put them in `~/Downloads`: that folder is for things I download. Working
-files nobody needs to keep stay in your scratchpad. When you tell me about a file, give its
-full path.
+Anything meant for me goes in `~/Documents/Claude/<project>/` (for example
+`~/Documents/Claude/Lilac Moon/`), never in `~/Downloads`, which is for things I download.
+
+- **One folder per task, named `YYYY-MM-DD HHMM <task>`** (local time when the task
+  started, 24-hour clock), for example `2026-10-26 0317 Desk mat designs`. Sorting
+  a project's folder by name then puts the newest work last. Later output for the same
+  task goes in the same folder.
+- **Only finished, good-looking formats: PNG, PDF or HTML.** Never Markdown, plain text,
+  JSON or CSV: render a written document to a PDF (or a self-contained HTML page) with a
+  clean layout, and make charts and screenshots PNGs. A file the folder needs to make
+  sense, such as a deck, is a single self-contained HTML file.
+- Clear file names, no working files: drafts and intermediates stay in your scratchpad.
+- Nothing there may be the only copy of anything that matters: I delete freely.
+- When you tell me about a file or folder, give its full path.
 
 ## Installing tools
 
