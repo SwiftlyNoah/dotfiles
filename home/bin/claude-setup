@@ -6,8 +6,8 @@
 #      home/AGENTS.md, and local/CLAUDE.md (your private notes) when you have one
 #   2. claude-pool: the shared account pool, its menu bar, and this Mac's pool key
 #   3. the flags every session starts with (`cc`)
-#   4. the shared browsers sessions drive (home/bin/agent-browser-mcp), and the other
-#      MCP servers every session has (Figma)
+#   4. the shared browsers sessions drive (home/bin/agent-browser-mcp) in place of Claude
+#      in Chrome, and the other MCP servers every session has (Figma)
 #
 # The person at the Mac still does the sign-ins: GitHub (`gh auth login`), Claude
 # (`claude /login`), and the sites in each shared browser's profile.
@@ -56,6 +56,12 @@ if claude mcp get browser >/dev/null 2>&1; then
 else
   claude mcp add -s user browser -- "$BROWSER_MCP"
 fi
+# Claude in Chrome would give sessions a second browser, my personal one, and only on my
+# own account. Its switch lives in ~/.claude.json, beside the MCP servers.
+if [[ $(jq '.claudeInChromeDefaultEnabled' ~/.claude.json 2>/dev/null) != false ]]; then
+  jq '.claudeInChromeDefaultEnabled = false' ~/.claude.json >~/.claude.json.new && mv ~/.claude.json.new ~/.claude.json
+fi
+print -- "  Claude in Chrome is off"
 # Figma signs in on first use (/mcp). Tools only some projects need go in that
 # project's .mcp.json instead, so they don't load into every session.
 if claude mcp get figma >/dev/null 2>&1; then

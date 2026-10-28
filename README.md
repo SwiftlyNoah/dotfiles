@@ -243,7 +243,8 @@ of that:
 - **The account pool**: [`claude-pool`](https://github.com/SwiftlyNoah/claude-pool)
   (private) runs sessions on my own seat, with backup accounts for when I run out, and shows
   every account's usage in a menu bar app. `home/bin/claude-setup` installs it, saves the
-  flags `cc` starts with, and registers the shared browser.
+  flags `cc` starts with, registers the shared browser and Figma, and turns Claude in
+  Chrome off (sessions use the shared browser instead).
 - **The shared browsers**: `home/bin/agent-browser-mcp` connects Google's
   [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) to a Chrome
   with its own profile, so every agent session, on any account, drives the same signed-in
@@ -255,8 +256,14 @@ of that:
   itself); the profiles are readable only by me and kept out of Time Machine. Both are
   defined in `home/lib/agent-browser.zsh`, and each can have its own Chrome color, from a
   `#RRGGBB` line in `~/.config/agent-browser/<name>/theme-color`. They start in the
-  background and open agents' pages behind my apps, so they never take focus.
-- **Hooks**: `auto-accept.sh` approves tool calls while a session is in accept-edits mode.
+  background and open agents' pages behind my apps, so they never take focus. A session's
+  pages close when it ends (`home/lib/agent-browser-mcp/own-pages.mjs`), and pages left by
+  a session that was killed close when the next one starts; pages it didn't open stay.
+- **Hooks**: `guard.mjs` stops what can't be undone, whatever the permission mode: a force
+  push to main, deleting a repo, `rm -r` on my home folder or a folder directly in it,
+  erasing a disk, reading the keychain, sharing a Drive file. Each waits for me. Sending
+  mail and trashing mail, events or Drive files are denied in `settings.json`, so sessions
+  only write drafts. `auto-accept.sh` approves tool calls while a session is in accept-edits mode.
   `herdr-cc-resume.sh` makes herdr bring Claude panes back through `cc`. herdr installs its
   own hook beside them (`herdr integration install claude`) and owns that entry in
   `settings.json`.
