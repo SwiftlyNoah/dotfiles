@@ -6,7 +6,8 @@
 #      home/AGENTS.md, and local/CLAUDE.md (your private notes) when you have one
 #   2. claude-pool: the shared account pool, its menu bar, and this Mac's pool key
 #   3. the flags every session starts with (`cc`)
-#   4. the shared browsers sessions drive (home/bin/agent-browser-mcp)
+#   4. the shared browsers sessions drive (home/bin/agent-browser-mcp), and the other
+#      MCP servers every session has (Figma)
 #
 # The person at the Mac still does the sign-ins: GitHub (`gh auth login`), Claude
 # (`claude /login`), and the sites in each shared browser's profile.
@@ -55,6 +56,13 @@ if claude mcp get browser >/dev/null 2>&1; then
 else
   claude mcp add -s user browser -- "$BROWSER_MCP"
 fi
+# Figma signs in on first use (/mcp). Tools only some projects need go in that
+# project's .mcp.json instead, so they don't load into every session.
+if claude mcp get figma >/dev/null 2>&1; then
+  print -- "  the Figma MCP is registered"
+else
+  claude mcp add -s user --transport http figma https://mcp.figma.com/mcp
+fi
 # How the browser and the pool fit together on this Mac, plus an import of your private
 # notes (local/CLAUDE.md: what each browser is signed in to, for one). It lives here,
 # between markers, rather than in the pool's note: that note goes to every pool member, and
@@ -64,7 +72,6 @@ note=$(cat <<'EOF'
 ## Shared browser and the pool
 
 - Browser work never needs my own seat: the shared browser works on every pool account.
-  Ignore "Claude in Chrome is not available" in a switch note; that is a different tool.
 EOF
 )
 [[ -f $LOCAL_NOTES ]] && note+=$'\n\n@~/.dotfiles/local/CLAUDE.md'
