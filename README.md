@@ -257,13 +257,13 @@ of that:
   defined in `home/lib/agent-browser.zsh`, and each can have its own Chrome color, from a
   `#RRGGBB` line in `~/.config/agent-browser/<name>/theme-color`. They start in the
   background and open agents' pages behind my apps, so they never take focus. A session's
-  pages close when it ends (`home/lib/agent-browser-mcp/own-pages.mjs`), and pages left by
-  a session that was killed close when the next one starts; pages it didn't open stay.
-- **Hooks**: `guard.mjs` stops what can't be undone, whatever the permission mode: a force
-  push to main, deleting a repo, `rm -r` on my home folder or a folder directly in it,
-  erasing a disk, reading the keychain, sharing a Drive file. Each waits for me. Sending
-  mail and trashing mail, events or Drive files are denied in `settings.json`, so sessions
-  only write drafts. `auto-accept.sh` approves tool calls while a session is in accept-edits mode.
+  pages close a few minutes after it ends (`home/lib/agent-browser-mcp/own-pages.mjs`),
+  unless it's back by then (a pool switch restarts it); pages it didn't open stay.
+- **Hooks**: `guard.mjs` has a session check with me before what can't be undone,
+  whatever the permission mode: sending or forwarding mail, trashing mail, events or Drive
+  files, sharing a Drive file, a force push to main, deleting a repo, `rm -r` on my home
+  folder or a folder directly in it, erasing a disk. When I asked for it, that's one click.
+  `auto-accept.sh` approves tool calls while a session is in accept-edits mode.
   `herdr-cc-resume.sh` makes herdr bring Claude panes back through `cc`. herdr installs its
   own hook beside them (`herdr integration install claude`) and owns that entry in
   `settings.json`.

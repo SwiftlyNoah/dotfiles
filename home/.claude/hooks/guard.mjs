@@ -1,29 +1,38 @@
-// Stops the few things a session must not do on its own, whatever its permission mode.
+// Has a session check with me before the few things that can't be undone, whatever its
+// permission mode. Everything else runs as before.
 //
-// Sessions run with permissions skipped, unattended, next to a browser and mail signed in
-// to real accounts, so one instruction hidden in a page or an email could steer one. Most
-// mistakes there are cheap to undo; these aren't, so they wait for me ("ask") or never
-// happen ("deny"):
+// Sessions run with permissions skipped, often unattended, next to mail and a browser
+// signed in to real accounts, so one instruction hidden in a page or an email could steer
+// one. When I asked for the action, approving it is one click; when I didn't, it waits:
 //
+//   - sending, replying to or forwarding mail, and trashing mail, events or Drive files
+//   - sharing a Google Drive file
 //   - a force push to main or master (including a push with no branch named, from main)
 //   - deleting a GitHub repo
 //   - rm -r on /, my home folder, or a folder directly in either (~/Documents, /Users)
 //   - erasing a disk (diskutil erase*, dd to a device)
-//   - reading the keychain (security find-*-password, dump-keychain, export)
-//   - sharing a Google Drive file
-//   - reading the claude-pool key (denied: see ~/.claude/CLAUDE.md)
 //
-// Sending or forwarding mail and deleting events or files are denied outright in
-// settings.json instead (permissions.deny), which no mode can skip.
+// Reading the claude-pool key is refused outright (see ~/.claude/CLAUDE.md).
 //
 // Wired up as a PreToolUse hook in home/.claude/settings.json; home.nix links it to
-// ~/.claude/hooks/guard.mjs. Emitting nothing leaves the decision alone.
+// ~/.claude/hooks/guard.mjs. Emitting nothing leaves the decision alone. A session with
+// no one to ask (claude -p) is refused instead.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 
 const HOME = homedir();
+const OUTWARD = {
+  mcp__claude_ai_Gmail__send_message: "sending mail",
+  mcp__claude_ai_Gmail__reply: "replying to mail",
+  mcp__claude_ai_Gmail__forward: "forwarding mail",
+  mcp__claude_ai_Gmail__trash_message: "trashing mail",
+  mcp__claude_ai_Gmail__trash_thread: "trashing mail",
+  mcp__claude_ai_Google_Calendar__delete_event: "deleting a calendar event",
+  mcp__claude_ai_Google_Drive__trash_file: "trashing a Drive file",
+  mcp__claude_ai_Google_Drive__share_file: "sharing a Drive file",
+};
 const POOL_KEY = /claude-pool\/age-identity/;
 
 function decide(permissionDecision, reason) {
@@ -129,8 +138,6 @@ function checkBash(command, cwd) {
       decide("ask", "deleting a GitHub repo");
     if (cmd === "diskutil" && /^(erase|zero|randomDisk|secureErase|partitionDisk)/i.test(sub ?? "")) decide("ask", `diskutil ${sub}`);
     if (cmd === "dd" && words.some((w) => /^of=\/dev\//.test(w))) decide("ask", "dd to a device");
-    if (cmd === "security" && /^(find-(generic|internet)-password|dump-keychain|export)$/.test(sub ?? ""))
-      decide("ask", `security ${sub} reads the keychain`);
   }
 }
 
@@ -139,4 +146,4 @@ const { tool_name: tool, tool_input: args = {}, cwd = process.cwd() } = input;
 if (tool === "Bash") checkBash(args.command ?? "", cwd);
 else if (["Read", "Edit", "Write"].includes(tool) && POOL_KEY.test(args.file_path ?? ""))
   decide("deny", "the claude-pool key is never read or copied");
-else if (tool === "mcp__claude_ai_Google_Drive__share_file") decide("ask", "sharing a Drive file");
+else if (OUTWARD[tool]) decide("ask", OUTWARD[tool]);
