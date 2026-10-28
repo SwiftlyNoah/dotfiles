@@ -3,18 +3,24 @@
 //
 // A session's pages are the ones its new_page calls created, plus the popups those opened.
 // Sessions share the browser, so each new_page runs under a lock that every session's
-// server takes: the pages that appear while it's held are this call's. Each server keeps
-// its list in a file named after its process ID, and any server that starts closes the
-// pages listed for a process that has died without cleaning up (killed, or the Mac
-// restarted). Pages a session didn't open, mine included, are never touched.
+// server takes: the pages that appear while it's held are this call's. Each session's list
+// is a file named after the session, so a session that a pool switch restarts keeps its
+// pages. When a server exits, its pages close a few minutes later unless the session is
+// back by then, and any server that starts also closes what dead sessions left (one that
+// was killed, or the Mac restarted). Pages a session didn't open, mine included, are
+// never touched.
 import { open, readdir, readFile, rm, stat, writeFile, mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DIR = join(homedir(), ".local/share/agent-browser/pages");
 const LOCK = join(DIR, "new-page.lock");
 // Longer than any new_page waits for its page to load.
 const STALE_LOCK_MS = 120_000;
+// How long a session's pages outlive its server: enough for a pool switch to bring it back.
+const GRACE_MS = Number(process.env.AGENT_BROWSER_PAGE_GRACE_MS) || 180_000;
 
 const alive = (pid) => {
   try {
@@ -100,8 +106,20 @@ async function closePages(browserUrl, ids) {
 }
 
 export function ownPages(browserUrl) {
-  const file = join(DIR, `${process.pid}.json`);
+  // By session, which outlives this process: a pool switch restarts the session's servers.
+  const file = join(DIR, `${process.env.CLAUDE_CODE_SESSION_ID || `pid-${process.pid}`}.json`);
   const owned = new Set();
+  const save = async () => {
+    await mkdir(DIR, { recursive: true });
+    await writeFile(file, JSON.stringify({ browserUrl, pid: process.pid, pages: [...owned] }));
+  };
+  // The same session back after a restart takes its pages back.
+  const adopted = readFile(file, "utf8")
+    .then(async (text) => {
+      for (const id of JSON.parse(text).pages ?? []) owned.add(id);
+      await save();
+    })
+    .catch(() => {});
   // The pages open before the new_page under way, if one is (the lock allows one at a time).
   let pending = null;
   const take = async (before) => {
@@ -110,6 +128,7 @@ export function ownPages(browserUrl) {
   return {
     // Call before a new_page goes to the server, and pass what it returns to opened().
     async opening() {
+      await adopted;
       await lock();
       try {
         return (pending = await pageIds(browserUrl));
@@ -126,30 +145,41 @@ export function ownPages(browserUrl) {
         pending = null;
         await unlock();
       }
-      await writeFile(file, JSON.stringify({ browserUrl, pages: [...owned] }));
+      await save();
     },
-    async closeAll() {
+    // Call as the server exits. Its pages close a few minutes later, unless the session has
+    // come back by then (a pool switch, /mcp reconnecting it).
+    async release() {
       // A session can end while its new_page is still loading: that page is its too.
       if (pending) await take(pending).catch(() => {});
       await unlock().catch(() => {});
-      await closePages(browserUrl, owned);
-      await rm(file, { force: true });
+      if (owned.size === 0) return;
+      await save();
+      spawn(process.execPath, [fileURLToPath(import.meta.url), "sweep-later"], { detached: true, stdio: "ignore" }).unref();
     },
   };
 }
 
-// Closes what dead sessions left behind.
+// Closes the pages of sessions that ended (their server gone) more than GRACE_MS ago.
 export async function sweep() {
   for (const name of await readdir(DIR).catch(() => [])) {
-    const pid = Number(name.replace(/\.json$/, ""));
-    if (!name.endsWith(".json") || !pid || alive(pid)) continue;
+    if (!name.endsWith(".json")) continue;
     const path = join(DIR, name);
     try {
-      const { browserUrl, pages } = JSON.parse(await readFile(path, "utf8"));
-      await closePages(browserUrl, new Set(pages));
+      const { browserUrl, pid, pages } = JSON.parse(await readFile(path, "utf8"));
+      const { mtimeMs } = await stat(path);
+      if (alive(pid) || Date.now() - mtimeMs < GRACE_MS) continue;
+      await closePages(browserUrl, new Set(pages)).catch(() => {
+        // Its browser isn't running: those pages are gone already.
+      });
+      await rm(path, { force: true });
     } catch {
-      // Its browser isn't running: those pages are gone already.
+      // Written as we read it, or already swept by another server.
     }
-    await rm(path, { force: true });
   }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === "sweep-later") {
+  await sleep(GRACE_MS + 5_000);
+  await sweep();
 }

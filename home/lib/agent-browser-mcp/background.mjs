@@ -21,7 +21,7 @@ sweep().catch(() => {});
 
 const child = spawn(server, args, { stdio: ["pipe", "pipe", "inherit"] });
 child.on("exit", async (code, signal) => {
-  await pages.closeAll().catch(() => {});
+  await pages.release().catch(() => {});
   if (signal) process.kill(process.pid, signal);
   else process.exit(code ?? 0);
 });
