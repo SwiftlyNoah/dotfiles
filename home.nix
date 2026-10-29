@@ -160,6 +160,12 @@ in
               Minute = 0;
             };
           };
+          # Hourly: leftovers of builds, browsers and agent sessions that nothing uses any
+          # more, and the `copies` in local/config.json to their external disk.
+          mac-tidy = {
+            args = [ ];
+            at.Minute = 15;
+          };
           # Daily: every package manager to its latest version, and a notification saying
           # what changed and whether a rebuild is waiting.
           mac-update = {

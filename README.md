@@ -90,6 +90,7 @@ File paths that agents print (`lib/api/requestAPI.ts:142`) open in VS Code at th
 | `ga`, `gc`, `gp`, `pull`, `m` | `git add .`, `git commit -m`, `git push`, `git pull`, `git switch main` |
 | `mac-check` | my Mac's security checklist (below) |
 | `mac-update` | update everything (below) |
+| `mac-tidy` | clear what builds, browsers and agents left behind (below); `--dry-run` lists it |
 
 **Apps and tools**:
 
@@ -158,8 +159,10 @@ fine way to start.
 - **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port, and
   the `folders` whose sessions use it; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
   (`chromeProfiles`), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
-  file every session starts with (`claudeSettings`), and the dates `mac-update` leaves
-  alone (`deployDays`).
+  file every session starts with (`claudeSettings`), the dates `mac-update` leaves
+  alone (`deployDays`), folders `mac-tidy` keeps a copy of on an external disk
+  (`copies`: each a `from` folder and a `to` under `/Volumes`), and a disk for what isn't
+  expected to be used again (`archive`).
 - **`CLAUDE.md`**: notes for your agents that shouldn't be public, such as what each
   browser is signed in to. `claude-setup` imports it into `~/.claude/CLAUDE.md`.
 
@@ -195,6 +198,21 @@ and nothing waits on me remembering to update it.
 The one exception is deploy days: `deployDays` in your own settings lists dates when the
 morning job leaves everything alone, so a CLI can't change under a release. It catches up
 the next day.
+
+## Disk space
+
+Builds, headless browsers and dozens of agent sessions fill a disk fast. An hourly launchd
+job, `mac-tidy`, removes their leftovers once nothing has a file open in them:
+
+- the copies of Chrome that Chrome leaves behind when automation kills it instead of
+  quitting it (one per launch, hundreds a day);
+- Claude Code scratchpads in `/private/tmp`, once their session has been idle for 3 days;
+- Xcode DerivedData for projects not built in a week, and simulators for iOS versions no
+  longer installed.
+
+It also brings each of your `copies` up to date whenever its external disk is connected,
+deleting nothing on either side, and moves Claude Code transcripts idle for two weeks to your
+`archive` disk (under `Claude transcripts`), from where moving one back restores it.
 
 ## Security
 
