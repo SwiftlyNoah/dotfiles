@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Keeps the internal disk light: removes what builds, browsers and agent sessions leave behind
-# once nothing uses it any more, copies folders from local/config.json's `copies` to an
+# once nothing uses it any more, stops processes that idle agent sessions left running, copies folders from local/config.json's `copies` to an
 # external disk, and moves old transcripts to its `archive` disk, whenever those disks are
 # plugged in. The hourly launchd job in home.nix runs it.
 #
@@ -17,14 +17,26 @@ source "${0:A:h:h}/lib/local-config.zsh"
 readonly CLONE_MIN_AGE_MINUTES=60
 readonly SCRATCH_IDLE_DAYS=3
 readonly DERIVED_DATA_IDLE_DAYS=7
+readonly NPX_IDLE_DAYS=30
 readonly TRANSCRIPT_IDLE_DAYS=14
 
 dry_run=0
 [[ ${1:-} == --dry-run ]] && dry_run=1
 
 free_gb() { df -k /System/Volumes/Data | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }'; }
-# Every file my processes have open, working directories included, listed once up front.
-open_paths=$(lsof -w -u $USER -Fn 2>/dev/null | sed -n 's/^n//p')
+# A Claude Code session folder (/private/tmp/claude-<uid>/<project>/<session id>) whose
+# transcript hasn't changed in a few days.
+session_idle() { # dir
+  local transcripts=($HOME/.claude/projects/*/${1:t}.jsonl(Nom))
+  (( ${#transcripts} )) || transcripts=($1)
+  local recent=(${transcripts[1]}(Nmd-$SCRATCH_IDLE_DAYS))
+  (( ! ${#recent} ))
+}
+# Nothing in it changed for this many days.
+untouched() { # dir, days
+  [[ -z $(find $1 -mtime -$2 -print -quit 2>/dev/null) ]]
+}
+sessions=(/private/tmp/claude-$UID/*/[[:xdigit:]](#c8)-[[:xdigit:]](#c4)-*(/N))
 in_use() { [[ $'\n'$open_paths$'\n' == *$'\n'$1(/*|)$'\n'* ]]; }
 remove() { # path, reason
   print -r -- "remove $(du -sh "$1" 2>/dev/null | cut -f1)  $1  ($2)"
@@ -32,6 +44,37 @@ remove() { # path, reason
 }
 
 print -- "mac-tidy $(date '+%Y-%m-%d %H:%M'), $(free_gb) GB free"
+
+# Processes an idle session left running: ones launchd adopted (their parent is gone) whose
+# working directory is in its folder, like a test harness's loops or a dev server. They are
+# asked to stop, then killed if they haven't after a few seconds. A live session's own
+# processes keep it as their parent, and command lines are never matched (a live session's
+# can name any path), so nothing a session still owns is touched.
+typeset -A cwd_of cmd_of
+ps -axo pid=,ppid=,uid=,command= | while read -r pid ppid owner cmd; do
+  [[ $ppid == 1 && $owner == $UID ]] && cmd_of[$pid]=$cmd
+done
+if (( ${#cmd_of} )); then
+  lsof -w -a -d cwd -p ${(j:,:)${(k)cmd_of}} -Fpn 2>/dev/null | while read -r line; do
+    case $line in p*) pid=${line#p} ;; n*) cwd_of[$pid]=${line#n} ;; esac
+  done
+fi
+stopped=()
+for dir in $sessions; do
+  session_idle $dir || continue
+  for pid in ${(k)cmd_of}; do
+    [[ ${cwd_of[$pid]:-} == $dir(/*|) ]] || continue
+    print -r -- "stop $pid  ${cmd_of[$pid][1,100]}  (left running by a session idle for over $SCRATCH_IDLE_DAYS days)"
+    (( dry_run )) || { kill -TERM $pid 2>/dev/null && stopped+=($pid) }
+  done
+done
+if (( ${#stopped} )); then
+  sleep 5
+  kill -KILL $stopped 2>/dev/null
+fi
+
+# Every file my processes have open, working directories included, listed once up front.
+open_paths=$(lsof -w -u $USER -Fn 2>/dev/null | sed -n 's/^n//p')
 
 # Chrome copies itself here on every launch, and leaves the copy behind when it is killed
 # rather than quit (as Playwright and other automation do), which is hundreds a day.
@@ -41,23 +84,41 @@ done
 
 # Claude Code sessions' scratchpads (/private/tmp/claude-<uid>/<project>/<session id>), once
 # the session's transcript hasn't changed in a few days.
-for dir in /private/tmp/claude-$UID/*/[[:xdigit:]](#c8)-[[:xdigit:]](#c4)-*(/N); do
-  transcripts=($HOME/.claude/projects/*/${dir:t}.jsonl(Nom))
-  (( ${#transcripts} )) || transcripts=($dir)
-  recent=(${transcripts[1]}(Nmd-$SCRATCH_IDLE_DAYS))
-  (( ${#recent} )) && continue
+for dir in $sessions; do
+  session_idle $dir || continue
   in_use $dir || remove $dir "session idle for over $SCRATCH_IDLE_DAYS days"
 done
 
-# Xcode's build folders for projects not built in a week. They rebuild on the next build.
-for dir in $HOME/Library/Developer/Xcode/DerivedData/*-[a-z](#c28)(/N); do
-  [[ -n $(find $dir -mtime -$DERIVED_DATA_IDLE_DAYS -print -quit 2>/dev/null) ]] && continue
+# Xcode's build folders for projects not built in a week, and its shared caches (module
+# caches, precompiled SDK modules) when no build has used them in a week. All of them rebuild
+# on the next build.
+for dir in $HOME/Library/Developer/Xcode/DerivedData/*(/N); do
+  untouched $dir $DERIVED_DATA_IDLE_DAYS || continue
   in_use $dir || remove $dir "not built in $DERIVED_DATA_IDLE_DAYS days"
 done
 
-# Simulators whose iOS version is no longer installed.
-if (( ! dry_run )) && command -v xcrun >/dev/null; then
-  xcrun simctl delete unavailable 2>/dev/null
+# Packages npx downloaded and nothing has run in a month. npx fetches them again if needed.
+for dir in $HOME/.npm/_npx/*(/N); do
+  untouched $dir $NPX_IDLE_DAYS || continue
+  in_use $dir || remove $dir "npx hasn't used it in $NPX_IDLE_DAYS days"
+done
+
+if command -v xcrun >/dev/null; then
+  # Simulators whose iOS version is no longer installed.
+  (( dry_run )) || xcrun simctl delete unavailable 2>/dev/null
+  # Simulator runtimes no simulator uses, several GB each, except each platform's newest,
+  # so a new simulator never waits for a download.
+  devices=$(xcrun simctl list devices -j 2>/dev/null)
+  xcrun simctl runtime list -j 2>/dev/null | jq -r --argjson devices "${devices:-"{}"}" '
+    [to_entries[] | .value + {id: .key} | select(.state == "Ready" and .deletable)]
+    | group_by(.platformIdentifier)[]
+    | sort_by(.version | split(".") | map(tonumber? // 0)) | .[:-1][]
+    | select(($devices.devices[.runtimeIdentifier] // []) | length == 0)
+    | [.id, .runtimeIdentifier, .version, (.sizeBytes // 0)] | @tsv' |
+    while IFS=$'\t' read -r id runtime version bytes; do
+      print -r -- "remove $(printf %.1fG $(( bytes / 1073741824.0 )))  ${runtime##*.} ($version)  (no simulator uses it)"
+      (( dry_run )) || xcrun simctl runtime delete $id >/dev/null 2>&1
+    done
 fi
 
 # `copies`: folders kept on an external disk as well, brought up to date whenever it is
