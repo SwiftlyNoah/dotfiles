@@ -171,9 +171,14 @@ local function updateBadge()
   local frame = window:frame()
   badge:topLeft({ x = frame.x + frame.w - 46, y = frame.y + frame.h - 46 }):show()
 end
-BadgeWatcher = hs.window.filter.new("Google Chrome")
-  :subscribe({ hs.window.filter.windowFocused, hs.window.filter.windowUnfocused, hs.window.filter.windowMoved,
-    hs.window.filter.windowDestroyed, hs.window.filter.windowMinimized }, function() hs.timer.doAfter(0, updateBadge) end)
+-- hs.window.filter loads hs.spaces, which reads the Dock's app as it loads and fails while
+-- the Dock isn't running yet. At login Hammerspoon can start minutes before it.
+local function dockRunning() return #hs.application.applicationsForBundleID("com.apple.dock") > 0 end
+DockWaiter = hs.timer.waitUntil(dockRunning, function()
+  BadgeWatcher = hs.window.filter.new("Google Chrome")
+    :subscribe({ hs.window.filter.windowFocused, hs.window.filter.windowUnfocused, hs.window.filter.windowMoved,
+      hs.window.filter.windowDestroyed, hs.window.filter.windowMinimized }, function() hs.timer.doAfter(0, updateBadge) end)
+end, 1)
 FocusWatcher = hs.application.watcher.new(function(_, event)
   if event == hs.application.watcher.activated or event == hs.application.watcher.deactivated then updateBadge() end
 end):start()
