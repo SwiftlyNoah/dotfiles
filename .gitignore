@@ -7,8 +7,9 @@ home/.config/herdr/*
 !home/.config/herdr/config.toml
 !home/.config/herdr/sounds/
 
-# macOS and Nix build output
+# macOS, Nix and Python build output
 .DS_Store
+__pycache__/
 result
 result-*
 
