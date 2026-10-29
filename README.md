@@ -37,6 +37,10 @@ to the chimes.
   with Nerd Font icons.
 - **See-through:** [WezTerm](https://wezterm.org) at 82% opacity with a macOS blur, and
   herdr's panels transparent too, so the wallpaper's lilac moon glows through.
+- **A wallpaper that follows the sun:** [`wallpaper/`](wallpaper) paints a lilac crescent
+  over a pine lake in twelve frames, from midnight through dawn, day, sunset and blue hour,
+  and packs them into one dynamic wallpaper. macOS shows the frame that matches where the
+  sun really is, so the lake goes dark at the actual dusk, in any season.
 - **One sound for "something needs me":** "Lilac", two soft falling marimba notes, both
   when an agent has a question and as the Mac's alert.
 - **A quiet [herdr](https://herdr.dev) sidebar:** one line per agent (a gold dot while it

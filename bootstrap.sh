@@ -123,7 +123,13 @@ fi
 echo "==> 7. Latest versions of everything else (Homebrew, npm CLIs, Python)"
 "$DIR/home/bin/mac-update" --packages
 
-echo "==> 8. Screen lock"
+echo "==> 8. Wallpaper"
+# Rendered here rather than stored, since it's a few megabytes of pixels.
+if [ ! -f ~/Pictures/Wallpapers/lilac-moon-dynamic.heic ] && ! "$DIR/wallpaper/build.sh"; then
+  echo "    Not finished: fix what it reported above, then run wallpaper/build.sh." >&2
+fi
+
+echo "==> 9. Screen lock"
 # macOS turns the screen lock on only with your password, so no setting can do it.
 if sysadminctl -screenLock status 2>&1 | grep -q immediate; then
   echo "    on"

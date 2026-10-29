@@ -100,7 +100,7 @@
           ''
             cd ${./.}
             gitleaks dir . --redact --no-banner --log-level warn
-            shellcheck bootstrap.sh rebuild.sh home/.claude/hooks/*.sh home/.claude/statusline.sh home/.config/git/hooks/dispatch
+            shellcheck bootstrap.sh rebuild.sh wallpaper/build.sh home/.claude/hooks/*.sh home/.claude/statusline.sh home/.config/git/hooks/dispatch
             for f in home/bin/* home/lib/*.zsh; do zsh -n "$f"; done
             nixfmt --check ./*.nix
             deadnix --fail .
