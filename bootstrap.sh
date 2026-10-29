@@ -149,7 +149,7 @@ sysadminctl -screenLock status 2>&1 | grep -q immediate ||
   todo+=("Turn on the screen lock: sysadminctl -screenLock immediate -password -")
 tmutil destinationinfo 2>/dev/null | grep -q "^Name" ||
   todo+=("Add your Time Machine drives (Encrypt backups on), and keep the passwords in 1Password")
-todo+=("Install the App Store apps by hand: Amphetamine, ColorSlurp, Dynamic wallpaper")
+todo+=("Install the App Store apps by hand: Amphetamine, ColorSlurp")
 [ -n "$(jq -r '.workRepos[]?' "$DIR/local/config.json" 2>/dev/null)" ] &&
   todo+=("Set up your work repos: work-bootstrap")
 
