@@ -81,7 +81,6 @@ in
         ".claude/settings.json" = "home/.claude/settings.json";
         # One file at a time: herdr owns ~/.claude/hooks/herdr-agent-state.sh beside these.
         ".claude/hooks/auto-accept.sh" = "home/.claude/hooks/auto-accept.sh";
-        ".claude/hooks/guard.mjs" = "home/.claude/hooks/guard.mjs";
         ".claude/hooks/herdr-cc-resume.sh" = "home/.claude/hooks/herdr-cc-resume.sh";
         # Codex and opencode read this directly. Claude reads it through ~/.claude/CLAUDE.md,
         # a file of this Mac's own (see home/bin/claude-setup), which imports it.

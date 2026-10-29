@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$HOME/.claude/hooks/guard.mjs\"",
+            "command": "node \"$HOME/.dotfiles/home/.claude/hooks/guard.mjs\"",
             "timeout": 10
           }
         ]
