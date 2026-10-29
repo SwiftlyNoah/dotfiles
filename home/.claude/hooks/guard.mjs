@@ -14,8 +14,8 @@
 //
 // Reading the claude-pool key is refused outright (see ~/.claude/CLAUDE.md).
 //
-// Wired up as a PreToolUse hook in home/.claude/settings.json; home.nix links it to
-// ~/.claude/hooks/guard.mjs. Emitting nothing leaves the decision alone. A session with
+// Wired up as a PreToolUse hook in home/.claude/settings.json, which runs it from this
+// repo (no rebuild needed). Emitting nothing leaves the decision alone. A session with
 // no one to ask (claude -p) is refused instead.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
