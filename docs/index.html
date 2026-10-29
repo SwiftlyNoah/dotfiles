@@ -32,10 +32,10 @@ h1 em { font-style: italic; color: var(--iris); font-weight: 300; }
 .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); }
 .scene { border-radius: 22px; overflow: hidden; background: #17151f; }
 .scene svg { display: block; width: 100%; height: auto; }
-.lede { max-width: 62ch; color: var(--subtle); font-size: 18px; margin: 0; }
+.lede { max-width: 62ch; color: var(--subtle); font-size: 18px; margin: 0; text-wrap: pretty; }
 section { display: grid; gap: 22px; }
 h2 { font-family: var(--display); font-weight: 500; font-size: clamp(26px, 3.6vw, 34px); margin: 0; color: var(--bright); letter-spacing: -.01em; text-wrap: balance; }
-.sub { color: var(--subtle); margin: 0; max-width: 64ch; }
+.sub { color: var(--subtle); margin: 0; max-width: 64ch; text-wrap: pretty; }
 .palette { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; }
 .chip { display: grid; gap: 6px; }
 .chip span { display: block; height: 64px; border-radius: 12px; border: 1px solid var(--line); }
@@ -45,7 +45,7 @@ h2 { font-family: var(--display); font-weight: 500; font-size: clamp(26px, 3.6vw
 .two > * { min-width: 0; }
 figure { margin: 0; display: grid; gap: 10px; }
 figure img { width: 100%; border-radius: 14px; border: 1px solid var(--line); display: block; }
-figcaption { font-size: 14px; color: var(--subtle); }
+figcaption { font-size: 14px; color: var(--subtle); text-wrap: pretty; }
 .term { border-radius: 14px; border: 1px solid var(--line); background: rgba(31,29,48,.92); font-family: var(--mono); font-size: 13.5px; line-height: 1.7; padding: 16px 18px; overflow-x: auto; }
 .term .dim { color: var(--muted); } .term .iris { color: var(--iris); } .term .foam { color: var(--foam); } .term .gold { color: var(--gold); } .term .rose { color: var(--rose); } .term .pine { color: var(--pine); }
 .term .sel { background: #4a3f66; color: var(--bright); }
@@ -61,11 +61,13 @@ figcaption { font-size: 14px; color: var(--subtle); }
 .item { display: grid; grid-template-columns: 1fr auto; gap: 4px 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .item > div { min-width: 0; }
 .item b { color: var(--bright); font-weight: 600; }
-.item p { margin: 2px 0 0; color: var(--subtle); font-size: 15px; }
+.item p { margin: 2px 0 0; color: var(--subtle); font-size: 15px; text-wrap: pretty; }
 .item .price { font-family: var(--mono); font-size: 13px; color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
-.status { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px; }
+.item .price a { color: inherit; }
+.status { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 2px; white-space: nowrap; }
 .status.have { background: #2d3b3f; color: var(--foam); }
 .status.ready { background: #3a3150; color: var(--iris); }
+.status.order { background: #43362f; color: var(--gold); }
 a { color: var(--foam); text-underline-offset: 3px; }
 a:focus-visible { outline: 2px solid var(--iris); outline-offset: 2px; border-radius: 3px; }
 footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 22px; }
@@ -78,8 +80,8 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
 <div class="wrap">
   <div class="cover">
     <div class="cover-title"><h1>Lilac <em>Moon</em></h1><span class="kicker">Noah's setup · desk, screen, sound</span></div>
-    <div class="scene"><img src="desk-full-vision.jpg" alt="The full Lilac Moon desk at night, from the chair: a 34-inch ultrawide showing a moonlit pine lake, a lilac glow on the wall around it, a warm light bar lighting the desk and a wire Miata on the wall above, and on the pine desk a black keyboard with purple legends and a lavender rose on Escape, a graphite mouse and a starry lake desk mat" style="display:block;width:100%;height:auto"></div>
-    <p class="lede">One theme across everything I touch: Rosé Pine Moon, made my own. A deep purple-grey ground, soft lilac-grey text, lavender for what's mine, rose for warmth, and a crescent moon that shows up on the screen, the desk and the wall.</p>
+    <div class="scene"><img src="desk-full-vision.jpg" alt="The full Lilac Moon desk at night, from the chair: a 34-inch ultrawide showing a moonlit pine lake, a lilac glow on the wall around it, a warm light bar lighting the desk and a wire Miata on the wall above, and on the pine desk a black keyboard with purple legends and a lavender rose on Escape, a graphite mouse on a starry lake desk mat, a silver Mac Studio tucked under the right end of the screen, and the MacBook standing closed on the left" style="display:block;width:100%;height:auto"></div>
+    <p class="lede">One theme across everything I touch: Rosé Pine Moon, made my own. A deep purple-gray ground, soft lilac-gray text, lavender for what's mine, rose for warmth, and a crescent moon that shows up on the screen, the desk and the wall.</p>
   </div>
 
   <section>
@@ -103,7 +105,7 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
       <figure><img alt="The dynamic wallpaper at sunset: a still mountain lake in rose and purple, framed by pines, the sky mirrored in the water" src="wallpaper.jpg"><figcaption>The wallpaper follows the day: a lilac crescent over a pine lake at night, a peach dawn, soft lilac days, a rose sunset (here), then blue hour. A meteor at 3 a.m., and a cabin light on the far shore after dark.</figcaption></figure>
       <div style="display:grid; gap:10px; min-width:0">
         <div class="term" aria-label="Terminal in the Moon colors"><div><span class="dim">~/.dotfiles</span> <span class="pine">main</span> <span class="gold">!2</span></div><div><span class="iris">❯</span> <span class="sel">claude-pool</span></div><div class="dim">─────────────────────────────────────</div><div><span class="foam">●</span> Reading the build log, then the failing test…</div><div>&nbsp;</div><div><span class="dim">Opus 5.5 ·</span> <span class="iris">noah</span> <span class="dim">· ctx</span> <span class="foam">━━━━</span><span style="color:#56526e">──────────</span> <span class="dim">27%</span></div><div><span class="iris">❯</span> <span class="cursor">_</span></div></div>
-        <figcaption>WezTerm and herdr in Moon: translucent glass over the wallpaper, Maple Mono at 14.5, a quiet grey cursor and a lilac selection. VS Code wears Rosé Pine Moon, and Chrome too.</figcaption>
+        <figcaption>WezTerm and herdr in Moon: translucent glass over the wallpaper, Maple Mono at 14.5, a quiet gray cursor and a lilac selection. VS Code wears Rosé Pine Moon, and Chrome too.</figcaption>
       </div>
     </div>
   </section>
@@ -127,15 +129,16 @@ footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line)
         <div class="item"><div><b>Capsmiths Lavender Rose</b><p>A lavender resin rose on Esc: the one lilac key.</p></div><span class="price"><a href="https://1upkeyboards.com/shop/keycaps/keycaps-keycaps/artisans/capsmiths-artisan-keycap-lavender-rose/">$25</a></span></div>
         <div class="item"><div><b>Lilac Moon desk mat, 90 × 40 cm</b><p>Stitched edges; its back edge slides just under the monitor stand's feet.</p></div><span class="price"><a href="https://deskmat.io/upload">$39</a></span></div>
         <div class="item"><div><b>Logitech MX Master 3, Graphite</b><p>Already mine. It sits on the moon.</p></div><span class="price">owned</span></div>
-        <div class="item"><div><b>Twelve South BookArc, Space Grey</b><p>The MacBook stands up beside the monitor, with Insert H for the 14".</p></div><span class="price"><a href="https://www.twelvesouth.com/products/bookarc-space-grey-macbook-pro">$19.98</a></span></div>
+        <div class="item"><div><b>Mac Studio, M5 Max</b><span class="status order">On order</span><p>The always-on agent machine: 128GB, wired to Ethernet, tucked under the right end of the screen.</p></div><span class="price"><a href="https://www.apple.com/mac-studio/">$5,899</a></span></div>
+        <div class="item"><div><b>Twelve South BookArc, Space Grey</b><p>When the MacBook is home, it stands up beside the monitor, with Insert H for the 14".</p></div><span class="price"><a href="https://www.twelvesouth.com/products/bookarc-space-grey-macbook-pro">$19.98</a></span></div>
       </div>
     </div>
-    <figure><img src="desk-detail.jpg" alt="Close up from above: the black Keychron with purple GMK legends, a knurled knob and a lavender resin rose on Escape, and the graphite MX Master 3 beside the crescent moon on the lake desk mat" style="width:100%;border-radius:14px;border:1px solid var(--line)"><figcaption>Closer. Every key is where the Q1's 75% layout puts it, sculpted row by row like the real caps.</figcaption></figure>
+    <figure><img src="desk-detail.jpg" alt="Close up from above: the black Keychron with purple GMK legends, a knurled knob and a lavender resin rose on Escape, and the graphite MX Master 3 beside the crescent moon on the lake desk mat, with the front corner of the Mac Studio at the top right" style="width:100%;border-radius:14px;border:1px solid var(--line)"><figcaption>Closer. Every key is where the Q1's 75% layout puts it, sculpted row by row like the real caps.</figcaption></figure>
   </section>
 
   <section>
     <h2>The room</h2>
-    <figure><img src="desk-full-vision-above.jpg" alt="The same desk from above and to the right: the lilac wall glow, the warm pool of the light bar on the pine, the keyboard and mouse on the lake desk mat, and the MacBook in its stand" style="width:100%;border-radius:14px;border:1px solid var(--line)"><figcaption>From above. Rendered to scale from photos of the real desk: real sizes, real light.</figcaption></figure>
+    <figure><img src="desk-full-vision-above.jpg" alt="The same desk from above and to the right: the lilac wall glow, the warm pool of the light bar on the pine, the keyboard and mouse on the lake desk mat, the Mac Studio in the back right corner, and the MacBook in its stand" style="width:100%;border-radius:14px;border:1px solid var(--line)"><figcaption>From above. Rendered to scale from photos of the real desk: real sizes, real light. The Mac Studio is drawn where it will sit once it arrives.</figcaption></figure>
     <div class="list">
       <div class="item"><div><b>BenQ ScreenBar Halo 2</b><p>Warm light on the desk, about 2700 K, and its rear backlight washing the wall above the monitor, which is what lights the Miata.</p></div><span class="price"><a href="https://www.amazon.com/dp/B0DK59YKRS">$199</a></span></div>
       <div class="item"><div><b>Hue Play starter kit</b><p>Two light bars on the back of the monitor, one near each end, and the Bridge: a lilac glow up the wall and around the screen.</p></div><span class="price">$244.99</span></div>
