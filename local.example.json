@@ -6,5 +6,7 @@
   "chromeProfiles": [],
   "workRepos": [],
   "claudeSettings": null,
-  "deployDays": []
+  "deployDays": [],
+  "copies": [],
+  "archive": null
 }

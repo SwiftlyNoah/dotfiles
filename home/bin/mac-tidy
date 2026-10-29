@@ -1,0 +1,93 @@
+#!/bin/zsh
+# Keeps the internal disk light: removes what builds, browsers and agent sessions leave behind
+# once nothing uses it any more, copies folders from local/config.json's `copies` to an
+# external disk, and moves old transcripts to its `archive` disk, whenever those disks are
+# plugged in. The hourly launchd job in home.nix runs it.
+#
+#   mac-tidy             tidy, printing what was removed and how much space is free
+#   mac-tidy --dry-run   print what would be removed, removing nothing
+#
+# Nothing is removed while a process has a file open in it (which includes a shell or
+# build whose working directory is inside it).
+emulate -L zsh
+setopt no_unset pipe_fail null_glob extended_glob
+export PATH="/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+source "${0:A:h:h}/lib/local-config.zsh"
+
+readonly CLONE_MIN_AGE_MINUTES=60
+readonly SCRATCH_IDLE_DAYS=3
+readonly DERIVED_DATA_IDLE_DAYS=7
+readonly TRANSCRIPT_IDLE_DAYS=14
+
+dry_run=0
+[[ ${1:-} == --dry-run ]] && dry_run=1
+
+free_gb() { df -k /System/Volumes/Data | awk 'NR == 2 { printf "%.1f", $4 / 1048576 }'; }
+# Every file my processes have open, working directories included, listed once up front.
+open_paths=$(lsof -w -u $USER -Fn 2>/dev/null | sed -n 's/^n//p')
+in_use() { [[ $'\n'$open_paths$'\n' == *$'\n'$1(/*|)$'\n'* ]]; }
+remove() { # path, reason
+  print -r -- "remove $(du -sh "$1" 2>/dev/null | cut -f1)  $1  ($2)"
+  (( dry_run )) || rm -rf "$1"
+}
+
+print -- "mac-tidy $(date '+%Y-%m-%d %H:%M'), $(free_gb) GB free"
+
+# Chrome copies itself here on every launch, and leaves the copy behind when it is killed
+# rather than quit (as Playwright and other automation do), which is hundreds a day.
+for clone in ${$(getconf DARWIN_USER_TEMP_DIR):A:h}/X/com.google.Chrome.code_sign_clone/code_sign_clone.*(/Nmm+$CLONE_MIN_AGE_MINUTES); do
+  in_use $clone || remove $clone "Chrome no longer runs from it"
+done
+
+# Claude Code sessions' scratchpads (/private/tmp/claude-<uid>/<project>/<session id>), once
+# the session's transcript hasn't changed in a few days.
+for dir in /private/tmp/claude-$UID/*/[[:xdigit:]](#c8)-[[:xdigit:]](#c4)-*(/N); do
+  transcripts=($HOME/.claude/projects/*/${dir:t}.jsonl(Nom))
+  (( ${#transcripts} )) || transcripts=($dir)
+  recent=(${transcripts[1]}(Nmd-$SCRATCH_IDLE_DAYS))
+  (( ${#recent} )) && continue
+  in_use $dir || remove $dir "session idle for over $SCRATCH_IDLE_DAYS days"
+done
+
+# Xcode's build folders for projects not built in a week. They rebuild on the next build.
+for dir in $HOME/Library/Developer/Xcode/DerivedData/*-[a-z](#c28)(/N); do
+  [[ -n $(find $dir -mtime -$DERIVED_DATA_IDLE_DAYS -print -quit 2>/dev/null) ]] && continue
+  in_use $dir || remove $dir "not built in $DERIVED_DATA_IDLE_DAYS days"
+done
+
+# Simulators whose iOS version is no longer installed.
+if (( ! dry_run )) && command -v xcrun >/dev/null; then
+  xcrun simctl delete unavailable 2>/dev/null
+fi
+
+# `copies`: folders kept on an external disk as well, brought up to date whenever it is
+# connected. Nothing is deleted on either side.
+local_config '.copies[]? | [.from, .to] | @tsv' | while IFS=$'\t' read -r from to; do
+  from=$(local_path "$from") to=$(local_path "$to")
+  volume=${(M)to##/Volumes/[^/]##}
+  [[ -d $from && -n $volume && -d $volume ]] || continue
+  print -r -- "copy $from -> $to"
+  (( dry_run )) || { mkdir -p "$to" && rsync -a "$from/" "$to/"; }
+done
+
+# `archive`: a disk for what isn't expected to be used again. Claude Code transcripts (and
+# their session folders) idle for two weeks move there, under "Claude transcripts", whenever
+# it is connected. `claude --resume` no longer lists them; moving one back restores it.
+archive=$(local_path "$(local_config .archive)")
+if [[ -n $archive && -d ${(M)archive##/Volumes/[^/]##} ]]; then
+  # Project folders only, not links to them (claude-pool links one project to another).
+  projects=($HOME/.claude/projects/*(N/))
+  for transcript in ${^projects}/*.jsonl(N.md+$TRANSCRIPT_IDLE_DAYS); do
+    session=${transcript:r}
+    recent=($session/**/*(N.md-$TRANSCRIPT_IDLE_DAYS))
+    (( ${#recent} )) && continue
+    in_use $transcript && continue
+    print -r -- "archive ${transcript#$HOME/.claude/projects/}"
+    (( dry_run )) && continue
+    to="$archive/Claude transcripts/${${transcript:h}:t}"
+    mkdir -p "$to" && rsync -a --remove-source-files "$transcript" ${session}(N/) "$to/" &&
+      { [[ ! -d $session ]] || find "$session" -type d -empty -delete; }
+  done
+fi
+
+print -- "done, $(free_gb) GB free"
