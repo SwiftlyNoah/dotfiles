@@ -201,6 +201,48 @@ HideTimer = hs.timer.doEvery(30, function()
   end
 end)
 
+-- A Time Machine backup's progress in the menu bar ("Backup 17% · 4h 42m left") while one
+-- runs; gone the rest of the time. Clicking it shows the details. Its place, at the left end,
+-- is in home.nix (home.activation.menuBarOrder).
+local function duration(seconds)
+  local hours, minutes = math.floor(seconds / 3600), math.floor(seconds % 3600 / 60)
+  return hours > 0 and string.format("%dh %dm", hours, minutes) or string.format("%dm", math.max(minutes, 1))
+end
+local function gigabytes(bytes) return string.format("%.0f GB", bytes / 1e9) end
+
+BackupItem = hs.menubar.new(false, "backup")
+local function updateBackup()
+  hs.task.new("/usr/bin/tmutil", function(_, out)
+    local status = hs.plist.readString(out or "") or {}
+    if not status.Running then
+      BackupItem:removeFromMenuBar()
+      return
+    end
+    local progress = status.Progress or {}
+    local percent = tonumber(progress.Percent or status.Percent or -1) or -1
+    local left = tonumber(progress.TimeRemaining)
+    local title = "Backup"
+    if percent >= 0 then title = title .. string.format(" %d%%", math.floor(percent * 100)) end
+    if left then title = title .. " · " .. duration(left) .. " left" end
+    -- Phases are CamelCase names (ThinningPreBackup): split into words for the menu.
+    local phase = (status.BackupPhase or "Starting"):gsub("(%l)(%u)", "%1 %2")
+    local menu = { { title = "Time Machine: " .. phase, disabled = true } }
+    if progress.bytes and progress.totalBytes then
+      table.insert(menu, { title = gigabytes(progress.bytes) .. " of " .. gigabytes(progress.totalBytes) .. " copied", disabled = true })
+    end
+    if status.DestinationMountPoint then
+      table.insert(menu, { title = "To " .. status.DestinationMountPoint, disabled = true })
+    end
+    table.insert(menu, { title = "-" })
+    table.insert(menu, { title = "Time Machine Settings…", fn = function()
+      hs.execute("/usr/bin/open 'x-apple.systempreferences:com.apple.Time-Machine-Settings.extension'")
+    end })
+    BackupItem:setTitle(title):setMenu(menu):returnToMenuBar()
+  end, { "status", "-X" }):start()
+end
+updateBackup()
+BackupTimer = hs.timer.doEvery(15, updateBackup)
+
 -- This file is a live link into the dotfiles repo: watch the real file, and reload on a save.
 ConfigWatcher = hs.pathwatcher.new(hs.fs.pathToAbsolute(hs.configdir .. "/init.lua"), hs.reload):start()
 hs.autoLaunch(true)
