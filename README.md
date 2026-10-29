@@ -206,9 +206,13 @@ job, `mac-tidy`, removes their leftovers once nothing has a file open in them:
 
 - the copies of Chrome that Chrome leaves behind when automation kills it instead of
   quitting it (one per launch, hundreds a day);
-- Claude Code scratchpads in `/private/tmp`, once their session has been idle for 3 days;
-- Xcode DerivedData for projects not built in a week, and simulators for iOS versions no
-  longer installed.
+- Claude Code scratchpads in `/private/tmp`, once their session has been idle for 3 days,
+  and the processes such a session left running in its scratchpad after its parent died (a
+  test harness's loops, a dev server);
+- Xcode DerivedData for projects not built in a week, Xcode's shared module caches unused
+  for a week, and packages `npx` hasn't run in a month;
+- simulators for iOS versions no longer installed, and simulator runtimes no simulator uses
+  (each platform's newest stays).
 
 It also brings each of your `copies` up to date whenever its external disk is connected,
 deleting nothing on either side, and moves Claude Code transcripts idle for two weeks to your
