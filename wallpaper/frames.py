@@ -21,7 +21,18 @@ Positions: u is a fraction of the width, y is in points on the 982-point-tall ca
   glitter  (color, strength): the light's path on the water
   lamp     opacity of one small warm window light on the far shore, after dark
   back_fade  how far the farthest range fades into the horizon sky (default 0.55)
+
+PALETTE is Lilac Moon's colors (moon, from palette.json at the repo root), for the moon, the
+stars, the lamp and the desk mat's dots. The frames' own colors are paint for this scene.
+
+    python3 frames.py   prints the frames as JSON, for noahbrauner.com's room, which picks the
+                        frame for the real sun the way macOS does and lights the room by it
 """
+
+import json
+from pathlib import Path
+
+PALETTE = json.loads((Path(__file__).resolve().parent.parent / "palette.json").read_text())["moon"]
 
 FRAMES = [
     dict(
@@ -139,3 +150,7 @@ FRAMES = [
         water=("#221f35", 0.2, 0.95), glitter=("#c4a7e7", 0.55),
     ),
 ]
+
+
+if __name__ == "__main__":
+    print(json.dumps(FRAMES, indent=2))

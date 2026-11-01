@@ -13,6 +13,7 @@ this file. hero.webp and sidebar.webp are screenshots of a demo session, made by
 """
 import base64
 import io
+import json
 import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -23,13 +24,10 @@ from fontTools.ttLib import TTFont
 HERE = Path(__file__).parent
 FONTS = Path(sys.argv[1])
 
-# Lilac Moon: Rosé Pine Moon with my own ground and softer text, as the terminal has it.
-MOON = dict(base="#1f1d30", surface="#2a273f", overlay="#393552", muted="#6e6a86", subtle="#908caa",
-            text="#cfcce0", love="#eb6f92", gold="#f6c177", rose="#ea9a97", pine="#3e8fb0",
-            foam="#9ccfd8", iris="#c4a7e7", low="#2a283e", med="#44415a", high="#56526e")
-DAWN = dict(base="#faf4ed", surface="#fffaf3", overlay="#f2e9e1", muted="#9893a5", subtle="#797593",
-            text="#575279", love="#b4637a", gold="#ea9d34", rose="#d7827e", pine="#286983",
-            foam="#56949f", iris="#907aa9", low="#f4ede8", med="#dfdad9", high="#cecacd")
+# Lilac Moon (Rosé Pine Moon with my own ground and softer text) and Rosé Pine Dawn, from the
+# palette file at the repo root.
+_PALETTE = json.loads((HERE.parent.parent / "palette.json").read_text())
+MOON, DAWN = _PALETTE["moon"], _PALETTE["dawn"]
 ADVANCE = 0.6  # Maple Mono: every glyph is 0.6 em wide
 
 

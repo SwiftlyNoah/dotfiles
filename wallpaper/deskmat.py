@@ -19,16 +19,16 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from frames import FRAMES
+from frames import FRAMES, PALETTE
 from render import Scene
 
 # Where the moon sits on the mat that was printed (October 2026), as (fraction of the width,
 # points down from the top). The wallpaper's night moon has since moved with the real sun.
 MOON = (0.80, 205)
 
-# Love, gold, rose, pine, foam, iris: Rosé Pine Moon's accents, as on the dotfiles page.
-DOTS = ["#eb6f92", "#f6c177", "#ea9a97", "#3e8fb0", "#9ccfd8", "#c4a7e7"]
-SUBTLE = "#908caa"
+# Rosé Pine Moon's accents, in this order.
+DOTS = [PALETTE[c] for c in ("love", "gold", "rose", "pine", "foam", "iris")]
+SUBTLE = PALETTE["subtle"]
 
 
 def font(size_px: int) -> ImageFont.FreeTypeFont:

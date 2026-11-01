@@ -13,15 +13,13 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from frames import FRAMES
+from frames import FRAMES, PALETTE
 
 COLS = 4
 THUMB_W = 900
 GAP = 36
 LABEL_H = 76
-BG = (31, 29, 48)  # Lilac Moon ground, #1f1d30
-TEXT = (224, 222, 244)  # #e0def4
-MUTED = (144, 140, 170)  # #908caa
+BG, TEXT, MUTED = (PALETTE[c] for c in ("base", "bright", "subtle"))
 
 
 def font(size, bold=False):
