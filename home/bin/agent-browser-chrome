@@ -1,8 +1,10 @@
 #!/bin/zsh
 # Keeps one shared browser's Chrome running (main by default; see home/lib/agent-browser.zsh):
-# a launchd agent per browser (home.nix) runs this and restarts it whenever it exits, so a
-# Chrome that crashes, gets quit by accident or is relaunched for an update comes back on
-# its own within seconds.
+# a launchd agent per browser (home.nix) runs this. Whenever its Chrome exits (a crash, a
+# quit by accident, a relaunch for an update), this starts the next one as soon as the old
+# one's processes are gone. It never exits itself, so a restart never waits out launchd's
+# throttle on jobs that exit: it runs itself again, from the files as they are now, so a
+# change to these scripts reaches the next Chrome it starts.
 #
 #   agent-browser-chrome [id]   (an id from the local config's browsers)
 #
@@ -13,11 +15,17 @@ setopt no_unset
 source "${0:A:h:h}/lib/agent-browser.zsh"
 agent_browser_instance "${1:-main}" || exit 1
 
-while agent_browser_running; do sleep 5; done
-
+while agent_browser_running; do sleep 0.5; done
 agent_browser_prepare
 agent_browser_args
+started=$SECONDS
 # Through Launch Services in the background (-g), as a new instance beside mine (-n), and
-# waiting until it quits (-W) so launchd sees it running. A rebuild that reloads this job
-# stops only `open`: Chrome and the agents' tabs carry on, and the loop above waits for it.
-exec open -g -n -W -a "Google Chrome" --args "${reply[@]}"
+# waiting until it quits (-W). A rebuild that reloads this job stops only this script and
+# `open`: Chrome and the agents' tabs carry on, and the next run waits for it above.
+open -g -n -W -a "Google Chrome" --args "${reply[@]}"
+# A Chrome that can't stay up isn't relaunched in a tight loop.
+if (( SECONDS - started < 5 )); then
+  print -u2 -- "agent-browser: the $NAME Chrome exited right away; trying again shortly"
+  sleep 5
+fi
+exec "${0:A}" "${1:-main}"

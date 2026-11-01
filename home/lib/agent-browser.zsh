@@ -13,8 +13,12 @@
 # Optional, per browser, in ~/.config/agent-browser/<name>/ (outside this repo):
 #   theme-color   one hex line (#RRGGBB), its Chrome color
 #   icon.png      the icon of its launcher app and of the badge on its windows (1024x1024)
-#   headless      present: it runs without windows or a Dock icon until I open it from its
-#                 launcher (home/bin/agent-browser-mode), and goes back once I'm done
+#
+# Each runs windowed and hidden: agents drive its tabs from behind, and opening its
+# launcher (home/bin/agent-browser-mode) only unhides it, with no restart. Hammerspoon hides
+# it again whenever it shows itself without my asking, and once I'm done with it. (It ran
+# headless once, so it had no Dock icon, but then every look at it was a Chrome restart:
+# slow, and each one gave its tabs new IDs.)
 #
 # Not a custom icon on Chrome itself: that takes a copy of Chrome.app (the Dock and ⌘Tab
 # take the icon from the app bundle), and 1Password refuses any Chrome running from
@@ -22,13 +26,19 @@
 # a launcher app with its icon instead (home/bin/agent-browser-launchers).
 
 source "${${(%):-%x}:A:h}/local-config.zsh"
+readonly AGENT_BROWSER_PAGES="${${(%):-%x}:A:h}/agent-browser-mcp/own-pages.mjs"
+
+# The node that home-manager installs: launchd and Hammerspoon start with a bare PATH.
+agent_browser_node() {
+  PATH="/etc/profiles/per-user/$USER/bin:$PATH" node "$@"
+}
 
 # Every browser's id, main first.
 agent_browser_ids() {
   local_config '.browsers[].id'
 }
 
-# Sets PORT, STATE, PROFILE, LABEL (the launchd agent that keeps its Chrome running), NAME
+# Sets ID, PORT, STATE, PROFILE, LABEL (the launchd agent that keeps its Chrome running), NAME
 # (its launcher app) and CONFIG (its optional settings).
 agent_browser_instance() {
   local browser=$(local_config ".browsers[] | select(.id == \"$1\") | \"\\(.port) \\(.name)\"")
@@ -36,7 +46,7 @@ agent_browser_instance() {
     print -u2 -- "agent-browser: no browser named '$1' (${(j:, :)${(f)"$(agent_browser_ids)"}})"
     return 1
   fi
-  PORT=${browser%% *} NAME=${browser#* }
+  ID=$1 PORT=${browser%% *} NAME=${browser#* }
   # main keeps the unsuffixed paths and label it had before there were others.
   STATE="$HOME/.local/share/agent-browser${${1:#main}:+-$1}"
   PROFILE="$STATE/profile"
@@ -54,29 +64,92 @@ agent_browser_for() {
   print -r -- "$(local_config '.defaultBrowser // "main"')"
 }
 
-# Whether it should run headless right now: it opts in, and I haven't opened it to look.
-agent_browser_headless() {
-  [[ -e $CONFIG/headless && ! -e $STATE/visible ]]
-}
-
 # The running Chrome's process ID, if any.
 agent_browser_pid() {
   pgrep -f -- "MacOS/Google Chrome --user-data-dir=$PROFILE( |\$)"
 }
 
 # Quits its Chrome the way closing it would, over DevTools: Chrome saves its cookies and
-# session first, which a signal doesn't wait for. A Chrome that doesn't answer is killed.
+# session first, which a signal doesn't wait for (a SIGTERM loses every cookie it hasn't
+# written yet, sign-ins included). Its shutdown waits on the macOS keychain, which takes
+# from under a second to well over ten when the Mac is busy, so it gets 30 seconds. Every
+# step has a time limit, so a Chrome that is stuck can't leave the caller stuck with it:
+# one that doesn't finish gets a SIGTERM, and one that ignores that too is killed. Returns
+# once all of its processes are gone, so the next Chrome can take the profile.
 agent_browser_quit() {
   local pid=$(agent_browser_pid)
   [[ -n $pid ]] || return 0
+  # This Chrome's processes, taken now: once they are gone, home/bin/agent-browser-chrome
+  # starts the next Chrome right away, on the same profile, which must be left alone.
+  local -a pids=(${(f)"$(pgrep -f -- "--user-data-dir=$PROFILE( |\$)")"})
+  local -a left
   PATH="/etc/profiles/per-user/$USER/bin:$PATH" node --input-type=module -e '
-    const v = await (await fetch(`http://127.0.0.1:${process.argv[1]}/json/version`)).json();
+    setTimeout(() => process.exit(0), 3000);
+    const v = await (await fetch(`http://127.0.0.1:${process.argv[1]}/json/version`, { signal: AbortSignal.timeout(2000) })).json();
     const ws = new WebSocket(v.webSocketDebuggerUrl);
     ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: "Browser.close" }));
-    setTimeout(() => process.exit(0), 1000);' $PORT 2>/dev/null || true
-  for _ in {1..50}; do kill -0 $pid 2>/dev/null || return 0; sleep 0.2; done
-  kill $pid 2>/dev/null
-  while kill -0 $pid 2>/dev/null; do sleep 0.2; done
+    ws.onmessage = ws.onclose = () => process.exit(0);' $PORT 2>/dev/null || true
+  for _ in {1..150}; do kill -0 $pid 2>/dev/null || break; sleep 0.2; done
+  if kill -0 $pid 2>/dev/null; then
+    print -u2 -- "agent-browser: Chrome $pid did not quit; terminating it"
+    kill -TERM $pid 2>/dev/null
+    for _ in {1..25}; do kill -0 $pid 2>/dev/null || break; sleep 0.2; done
+    kill -KILL $pid 2>/dev/null
+  fi
+  # Its helpers (renderers, GPU) can outlive it for a moment, and hold the profile open.
+  local p
+  for _ in {1..25}; do
+    left=()
+    for p in $pids; do kill -0 $p 2>/dev/null && left+=($p); done
+    (( $#left )) || return 0
+    sleep 0.2
+  done
+  kill -KILL $left 2>/dev/null
+  return 0
+}
+
+# Restarts its Chrome (for an update), and waits until it answers again. Each session keeps the tabs it opened: Chrome gives restored tabs new
+# IDs, so they are matched up again from a list taken just before it quits. home/bin/
+# agent-browser-chrome starts the new Chrome as soon as the old one is gone.
+agent_browser_restart() {
+  local snapshot=$(mktemp -t agent-browser)
+  agent_browser_node "$AGENT_BROWSER_PAGES" snapshot "http://127.0.0.1:$PORT" >$snapshot 2>/dev/null || true
+  agent_browser_quit
+  if ! agent_browser_wait_up 30; then
+    # Its launchd agent isn't the one that relaunches by itself (before a rebuild has
+    # loaded it, say): start it now rather than after launchd's restart delay.
+    launchctl kickstart -k "gui/$UID/$LABEL" 2>/dev/null || true
+    agent_browser_wait_up 30 || { print -u2 -- "agent-browser: Chrome did not come back on port $PORT"; rm -f $snapshot; return 1; }
+  fi
+  agent_browser_node "$AGENT_BROWSER_PAGES" remap "http://127.0.0.1:$PORT" $snapshot || true
+  rm -f $snapshot
+}
+
+# Waits up to $1 seconds for its DevTools port to answer.
+agent_browser_wait_up() {
+  local -i tries=$(( $1 * 5 ))
+  while (( tries-- > 0 )); do
+    curl -fsS --max-time 1 "http://127.0.0.1:$PORT/json/version" >/dev/null 2>&1 && return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+# Brings this Chrome, and only this one, in front of me, on the tab an agent used most
+# recently (or a new tab when it has none).
+agent_browser_front() {
+  agent_browser_node "$AGENT_BROWSER_PAGES" front "http://127.0.0.1:$PORT" || true
+  agent_browser_app show
+}
+
+# Shows (unhides and brings in front) or hides its Chrome, the way the app's own menu
+# would; other Chromes, mine included, are untouched. Hammerspoon does it (AgentBrowsers in
+# home/.hammerspoon/init.lua): macOS lets only the app in front, or one with Hammerspoon's
+# permissions, bring another app forward. It also records whether I have it open.
+agent_browser_app() {
+  /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -q -t 5 -c "AgentBrowsers.$1('$ID')" >/dev/null && return 0
+  print -u2 -- "agent-browser: can't $1 the $ID browser: Hammerspoon isn't answering"
+  return 1
 }
 
 # Whether this instance's Chrome is running. The trailing space or end keeps "agent-browser"
@@ -123,9 +196,9 @@ agent_browser_color() {
 }
 
 # How each Chrome starts.
-# --no-startup-window: Chrome brings itself to the front when it opens its first window,
-# which would put the agents' browser over my apps every time one starts. The first window
-# now comes from an agent's first page, opened in the background (see background.mjs).
+# --restore-last-session: a Chrome that restarts (an update, a crash) brings back its tabs
+# and its session cookies, which is where many single sign-ons keep a session. Its windows
+# come back too, which Hammerspoon hides again.
 # ForceForegroundPriorityForAllTabs: Chrome drops a hidden tab's renderer to background
 # priority, which an M1 Pro runs only on its two efficiency cores. When the Mac is busy,
 # those renderers wait a minute or more to answer, and chrome-devtools-mcp, which attaches
@@ -136,34 +209,6 @@ agent_browser_args() {
     --user-data-dir="$PROFILE"
     --remote-debugging-port=$PORT --remote-debugging-address=127.0.0.1
     --enable-features=ForceForegroundPriorityForAllTabs
-    --no-first-run --no-default-browser-check --no-startup-window
-  )
-  [[ -e $CONFIG/headless ]] || return 0
-  # Restarts between headless and windowed (agent-browser-mode) bring back its tabs and
-  # its session cookies, which is where many single sign-ons keep a session:
-  # without this, each switch would sign it out. Only for these browsers: restoring
-  # windows makes a windowed Chrome come to the front every time it starts.
-  # (--no-startup-window would stop the restore, and isn't needed: a headless Chrome has no
-  # windows, and it only restarts windowed when I've asked to see it.)
-  reply=(${reply:#--no-startup-window} --restore-last-session)
-  agent_browser_headless || return 0
-  # Headless, Chrome tells sites so: "HeadlessChrome" in its user agent, and an 800x600
-  # screen. It gets the user agent the windowed Chrome sends (built from the installed
-  # version, the way Chrome reduces it) and this Mac's main display, in device pixels with
-  # the menu bar's work area, as a windowed Chrome reports them.
-  local version=$(defaults read "/Applications/Google Chrome.app/Contents/Info.plist" CFBundleShortVersionString)
-  # Its windows get the size a windowed Chrome would give them, nearly the whole screen:
-  # headless, Chrome makes them 500x375 in a corner, and that size comes back with the
-  # session when I open the browser to look at it.
-  local -a display=(${(s: :)"$(osascript -l JavaScript -e 'ObjC.import("AppKit");
-    const s = $.NSScreen.screens.objectAtIndex(0), f = s.frame, v = s.visibleFrame, k = s.backingScaleFactor;
-    const top = f.size.height - v.size.height - v.origin.y;
-    [f.size.width, f.size.height, k, top, v.size.height].join(" ")')"})
-  local -i width=${display[1]} height=${display[2]} scale=${display[3]} top=${display[4]} usable=${display[5]}
-  reply+=(
-    --headless=new
-    --user-agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version%%.*}.0.0.0 Safari/537.36"
-    --screen-info="{$((width * scale))x$((height * scale)) devicePixelRatio=$scale workAreaTop=$((top * scale))}"
-    --window-position=22,$((top + 23)) --window-size=$((width - 44)),$((usable - 30))
+    --no-first-run --no-default-browser-check --restore-last-session
   )
 }

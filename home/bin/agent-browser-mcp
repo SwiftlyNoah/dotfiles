@@ -37,15 +37,20 @@ zsystem flock -t 120 -f lock_fd "$SHARED/.lock"
 
 # Chrome updates itself on disk while it runs, and the running copy then can't start a
 # renderer for any new tab (every new page hangs, old tabs keep working). So when the
-# version on disk has moved on, quit it cleanly (the profile and its sign-ins survive;
-# open tabs close) and let the start below bring up the new one.
+# version on disk has moved on, restart it (the profile, its sign-ins, its tabs and who
+# owns each survive). Not while it is downloading: that would cut the download off.
 if up; then
   running=$(curl -fsS --max-time 1 "http://127.0.0.1:$PORT/json/version" |
     sed -nE 's/.*"Browser": *"[^/]*\/([^"]+)".*/\1/p')
   on_disk=$(defaults read "/Applications/Google Chrome.app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || true)
   if [[ -n $running && -n $on_disk && $running != "$on_disk" ]]; then
-    print -u2 -- "agent-browser: relaunching the $instance Chrome $running as $on_disk"
-    agent_browser_quit
+    pid=$(agent_browser_pid)
+    if [[ -n $pid ]] && lsof -p $pid -Fn 2>/dev/null | grep -q '\.crdownload$'; then
+      print -u2 -- "agent-browser: the $instance Chrome is $running, not $on_disk, but is downloading; relaunching later"
+    else
+      print -u2 -- "agent-browser: relaunching the $instance Chrome $running as $on_disk"
+      agent_browser_restart || true
+    fi
   fi
 fi
 
