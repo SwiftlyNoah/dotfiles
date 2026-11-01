@@ -108,10 +108,16 @@ agent_browser_quit() {
   return 0
 }
 
-# Restarts its Chrome (for an update), and waits until it answers again. Each session keeps the tabs it opened: Chrome gives restored tabs new
-# IDs, so they are matched up again from a list taken just before it quits. home/bin/
-# agent-browser-chrome starts the new Chrome as soon as the old one is gone.
+# Restarts its Chrome (for an update, say), and waits until it answers again. Each session
+# keeps the tabs it opened: Chrome gives restored tabs new IDs, so they are matched up again
+# from a list taken just before it quits. home/bin/agent-browser-chrome starts the new
+# Chrome as soon as the old one is gone. Never while it is downloading, which a restart
+# would cut off: then it says so and returns 75, for the caller to try again later.
 agent_browser_restart() {
+  if agent_browser_downloading; then
+    print -u2 -- "agent-browser: the $ID Chrome is downloading; not restarting it now"
+    return 75
+  fi
   local snapshot=$(mktemp -t agent-browser)
   agent_browser_node "$AGENT_BROWSER_PAGES" snapshot "http://127.0.0.1:$PORT" >$snapshot 2>/dev/null || true
   agent_browser_quit
@@ -123,6 +129,12 @@ agent_browser_restart() {
   fi
   agent_browser_node "$AGENT_BROWSER_PAGES" remap "http://127.0.0.1:$PORT" $snapshot || true
   rm -f $snapshot
+}
+
+# Whether its Chrome is downloading: it holds a file it is still writing (.crdownload) open.
+agent_browser_downloading() {
+  local pid=$(agent_browser_pid)
+  [[ -n $pid ]] && lsof -p $pid -Fn 2>/dev/null | grep -q '\.crdownload$'
 }
 
 # Waits up to $1 seconds for its DevTools port to answer.
@@ -174,24 +186,35 @@ agent_browser_prepare() {
     ln -sf "$hosts/com.1password.1password.json" "$PROFILE/NativeMessagingHosts/"
   # Left by an earlier try at custom icons.
   rm -rf "$STATE/Google Chrome.app" "$STATE/.app-stamp"
-  agent_browser_color
+  agent_browser_preferences
   return 0
 }
 
-# The theme color, set the way Chrome's own "Customize Chrome" color picker stores it: an
-# ARGB integer in the profile's Preferences (not one of the signed ones), written while
-# this Chrome is not running. A Chrome policy can't do it: policies reach every Chrome on
-# this Mac, mine included.
-agent_browser_color() {
-  [[ -f $CONFIG/theme-color ]] || return 0
-  local hex=${$(<"$CONFIG/theme-color")//[[:space:]#]/}
-  [[ $hex =~ '^[[:xdigit:]]{6}$' ]] || { print -u2 -- "agent-browser: $CONFIG/theme-color is not #RRGGBB"; return 0; }
-  local -i argb=$(( 0xFF000000 | 16#$hex ))
-  (( argb >= 2**31 )) && (( argb -= 2**32 ))
-  local prefs="$PROFILE/Default/Preferences"
+# Settings Chrome keeps in the profile's Preferences (not among the signed ones), written
+# while this Chrome is not running:
+# - Its last exit counts as clean. After one that wasn't (a crash, a kill), Chrome asks
+#   "Restore pages?" instead of restoring, in a bubble no one sees on a hidden window, and
+#   saves no session while it waits for an answer: then every later restart loses the
+#   tabs, and comes back asking again. Here a restart always restores (--restore-last-
+#   session), whatever the last exit was.
+# - The theme color, if it has one: set the way Chrome's own "Customize Chrome" color
+#   picker stores it, an ARGB integer. A Chrome policy can't do it: policies reach every
+#   Chrome on this Mac, mine included.
+agent_browser_preferences() {
+  local prefs="$PROFILE/Default/Preferences" theme='{}'
   mkdir -p "${prefs:h}"
   [[ -s $prefs ]] || print '{}' >"$prefs"
-  jq --argjson c $argb '.browser.theme += {user_color: $c, user_color2: $c, color_variant: 1, color_variant2: 1}' \
+  if [[ -f $CONFIG/theme-color ]]; then
+    local hex=${$(<"$CONFIG/theme-color")//[[:space:]#]/}
+    if [[ $hex =~ '^[[:xdigit:]]{6}$' ]]; then
+      local -i argb=$(( 0xFF000000 | 16#$hex ))
+      (( argb >= 2**31 )) && (( argb -= 2**32 ))
+      theme="{\"user_color\": $argb, \"user_color2\": $argb, \"color_variant\": 1, \"color_variant2\": 1}"
+    else
+      print -u2 -- "agent-browser: $CONFIG/theme-color is not #RRGGBB"
+    fi
+  fi
+  jq --argjson theme "$theme" '.profile += {exit_type: "Normal", exited_cleanly: true} | .browser.theme += $theme' \
     "$prefs" >"$prefs.new" && mv "$prefs.new" "$prefs"
 }
 
