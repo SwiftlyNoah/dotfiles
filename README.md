@@ -341,6 +341,8 @@ home.nix                  home-manager: packages, shell, git, live links, launch
 bootstrap.sh              new Mac to done
 rebuild.sh                apply the config (the first time too)
 local.example.json        the format of your own settings (local/, ignored here)
+palette.json              Lilac Moon's colors, the one source (palette.py checks the configs)
+wallpaper/                the dynamic wallpaper and the desk mat's print file
 home/
   AGENTS.md               rules for every coding agent
   .claude/                Claude Code settings, hooks and status line

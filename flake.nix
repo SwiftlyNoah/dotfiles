@@ -109,6 +109,8 @@
             python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' \
               home/.config/herdr/config.toml
             find home -name '*.lua' -exec luac -p {} +
+            jq empty palette.json
+            python3 palette.py --check
             touch $out
           '';
     };

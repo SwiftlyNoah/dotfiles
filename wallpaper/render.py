@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from frames import FRAMES
+from frames import FRAMES, PALETTE
 
 REF_H = 982.0
 SHORE = 0.80  # shoreline, as a fraction of the height
@@ -296,7 +296,7 @@ class Scene:
         rgbf = np.zeros((H, W, 3), np.float32)
         alpha = np.zeros((H, W), np.float32)
         moons = [(u * self.Wp, y) for u, y in [f["moon"][:2] for f in FRAMES if f.get("moon")] + list(self.extra_moons)]
-        cols = [rgb("#e0def4"), rgb("#c4a7e7"), rgb("#ea9a97"), rgb("#9ccfd8")]
+        cols = [rgb(PALETTE["bright"]), rgb(PALETTE["iris"]), rgb(PALETTE["rose"]), rgb(PALETTE["foam"])]
         count = int(900 * self.Wp / 1512)
         for _ in range(count):
             x, y = r.random() * self.Wp, 20 + r.random() * (SHORE * REF_H - 40)
@@ -436,13 +436,13 @@ class Scene:
             dist = np.hypot(Xp - mx, Yp - my)
             hr = 140.0
             halo = (1 - smoothstep(0, hr, dist)) ** 1.6 * 0.20 * ma
-            over(img, rgb("#c4a7e7"), halo.astype(np.float32))
+            over(img, rgb(PALETTE["iris"]), halo.astype(np.float32))
             R, r2, ox, oy = 52.0, 46.0, 25.0, -21.0
             disc = np.clip((R - dist) * s + 0.5, 0, 1)
             cut = np.clip((np.hypot(Xp - mx - ox, Yp - my - oy) - r2) * s + 0.5, 0, 1)
             # Gradient from lavender (upper left) to rose (lower right), as in the original.
             gd = ((Xp - (mx - 44)) * 90 + (Yp - (my - 54)) * 105) / (90**2 + 105**2)
-            gcol = rgb("#c4a7e7") + (rgb("#ea9a97") - rgb("#c4a7e7")) * np.clip(gd, 0, 1)[..., None]
+            gcol = rgb(PALETTE["iris"]) + (rgb(PALETTE["rose"]) - rgb(PALETTE["iris"])) * np.clip(gd, 0, 1)[..., None]
             over(img, gcol, (disc * cut * ma).astype(np.float32))
 
         # A single slow meteor, on one late night only.
@@ -454,7 +454,7 @@ class Scene:
             tt = np.clip(((Xp - x0) * vx + (Yp - y0) * vy) / L2, 0, 1)
             dd = np.hypot(Xp - (x0 + tt * vx), Yp - (y0 + tt * vy))
             line = np.clip(0.9 - dd * s * 0.55, 0, 1) * tt**2.2 * 0.75
-            over(img, rgb("#e0def4"), line.astype(np.float32))
+            over(img, rgb(PALETTE["bright"]), line.astype(np.float32))
 
         # Clouds.
         if f.get("clouds"):
@@ -482,7 +482,7 @@ class Scene:
             lx, ly = LAMP[0] * self.Wp, hor - 3.2
             d = np.hypot(Xp - lx, (Yp - ly) * 1.3)
             glow = np.exp(-((d / 12.0) ** 2)) * 0.28 + np.clip(1.1 - d * s * 0.55, 0, 1) * 0.95
-            over(img, rgb("#f6c177"), (glow * lamp).astype(np.float32))
+            over(img, rgb(PALETTE["gold"]), (glow * lamp).astype(np.float32))
 
         # Water: a mirror of the scene above, a little darker and tinted.
         refl = img[self.src_y, self.src_x] * (1 - self.src_fx) + img[self.src_y, self.src_x + 1] * self.src_fx
@@ -501,7 +501,7 @@ class Scene:
             lx = LAMP[0] * self.Wp
             below = np.clip((Yp - hor) / 46.0, 0, 1)
             streak = np.exp(-(((Xp - lx) / (1.1 + 2.5 * below)) ** 2)) * (1 - below) ** 1.5 * self.glint
-            over(refl, rgb("#f6c177"), (streak * 0.5 * lamp).astype(np.float32))
+            over(refl, rgb(PALETTE["gold"]), (streak * 0.5 * lamp).astype(np.float32))
         wm = self.water_mask[..., None]
         img = img * (1 - wm) + refl * wm
 
