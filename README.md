@@ -283,10 +283,13 @@ of that:
   own browser. 1Password fills passwords, only after I approve with Touch ID. A launchd job keeps each Chrome running (and relaunches it after Chrome updates
   itself); the profiles are readable only by me and kept out of Time Machine. Both are
   defined in `home/lib/agent-browser.zsh`, and each can have its own Chrome color, from a
-  `#RRGGBB` line in `~/.config/agent-browser/<name>/theme-color`. They start in the
-  background and open agents' pages behind my apps, so they never take focus. A session's
-  pages close a few minutes after it ends (`home/lib/agent-browser-mcp/own-pages.mjs`),
-  unless it's back by then (a pool switch restarts it); pages it didn't open stay.
+  `#RRGGBB` line in `~/.config/agent-browser/<name>/theme-color`. They run windowed but
+  hidden, and open agents' pages behind my apps, so they never take focus. Each has a
+  launcher in the Dock that shows it at once, on the tab an agent used last, and
+  Hammerspoon hides it again when I'm done. A session's pages close a few minutes after it
+  ends (`home/lib/agent-browser-mcp/own-pages.mjs`), unless it's back by then (a pool
+  switch restarts it); pages it didn't open stay. When Chrome restarts, each session keeps
+  its tabs.
 - **Hooks**: `guard.mjs` has a session check with me before what can't be undone,
   whatever the permission mode: sending or forwarding mail, trashing mail, events or Drive
   files, sharing a Drive file, a force push to main, deleting a repo, `rm -r` on my home

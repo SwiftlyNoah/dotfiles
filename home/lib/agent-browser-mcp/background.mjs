@@ -56,8 +56,10 @@ createInterface({ input: process.stdin, crlfDelay: Infinity })
       } catch {
         // Not JSON: pass it through untouched and let the server answer it.
       }
-      for (const m of [message].flat())
+      for (const m of [message].flat()) {
+        if (m?.method === "tools/call") pages.active().catch(() => {});
         if (opensPage(m)) opening.set(m.id, await pages.opening().catch(() => null));
+      }
       child.stdin.write(out + "\n");
     });
   })

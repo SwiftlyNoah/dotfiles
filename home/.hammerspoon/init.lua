@@ -44,22 +44,20 @@ end
 
 -- The agents' shared browsers (home/lib/agent-browser.zsh) are Chromes too: the same app,
 -- each started with its own --user-data-dir. Which one a Chrome is: "personal" for mine,
--- or the shared browser's name. Remembered per process, since asking costs a `ps`.
--- Their profiles live where home/lib/agent-browser.zsh puts them.
-local agentBrowsers = {}
-for _, browser in ipairs(localConfig.browsers) do
-  local suffix = browser.id == "main" and "" or "-" .. browser.id
-  agentBrowsers[browser.id] = { state = HOME .. "/.local/share/agent-browser" .. suffix }
-end
+-- or the shared browser's id. Remembered per process, since asking costs a `ps`.
+-- Their profiles live where home/lib/agent-browser.zsh puts them: main's in
+-- ~/.local/share/agent-browser, each other's in ~/.local/share/agent-browser-<id>.
+local AGENT_STATE = HOME .. "/.local/share/agent-browser"
+local function agentState(name) return AGENT_STATE .. (name == "main" and "" or "-" .. name) end
 local owners = {}
 local function chromeOwner(app)
   local pid = app:pid()
   if owners[pid] == nil then
     local command = hs.execute("/bin/ps -o command= -p " .. pid)
-    owners[pid] = "personal"
-    for name, browser in pairs(agentBrowsers) do
-      if command:find("--user-data-dir=" .. browser.state .. "/profile ", 1, true) then owners[pid] = name end
-    end
+    local prefix = "--user-data-dir=" .. AGENT_STATE
+    local at = command:find(prefix, 1, true)
+    local suffix = at and command:sub(at + #prefix):match("^(%-?[%w_]*)/profile ")
+    owners[pid] = suffix == nil and "personal" or (suffix == "" and "main" or suffix:sub(2))
   end
   return owners[pid]
 end
@@ -146,8 +144,11 @@ end
 
 -- The shared browsers I open from their launchers (agent-browser-mode). Each window of one
 -- wears its icon as a badge in the bottom-right corner while it's in front, so I always
--- know whose browser I'm typing in. And one that runs headless goes back to that once I'm
--- done with it: when I close its last window, or after it hasn't been in front for a while.
+-- know whose browser I'm typing in. They run windowed but hidden, and stay out of sight
+-- until I open one: from its launcher, its Dock icon or ⌘Tab. One that shows itself
+-- (Chrome starting and restoring its windows, an agent's new tab un-hiding it) is hidden
+-- again, and one I opened goes back once I'm done with it: when I close its last window,
+-- hide it, or leave it out of the front for a while.
 local IDLE = 15 * 60
 local function agentBrowser(app)
   local name = app and app:bundleID() == "com.google.Chrome" and chromeOwner(app)
@@ -179,32 +180,122 @@ DockWaiter = hs.timer.waitUntil(dockRunning, function()
     :subscribe({ hs.window.filter.windowFocused, hs.window.filter.windowUnfocused, hs.window.filter.windowMoved,
       hs.window.filter.windowDestroyed, hs.window.filter.windowMinimized }, function() hs.timer.doAfter(0, updateBadge) end)
 end, 1)
-FocusWatcher = hs.application.watcher.new(function(_, event)
-  if event == hs.application.watcher.activated or event == hs.application.watcher.deactivated then updateBadge() end
+-- Whether I have it open to look at (agent-browser-mode keeps the same file).
+local function opened(name) return hs.fs.attributes(agentState(name) .. "/visible") ~= nil end
+local function setOpened(name, yes)
+  local path = agentState(name) .. "/visible"
+  if yes then
+    local file = io.open(path, "w")
+    if file then file:close() end
+  else
+    os.remove(path)
+  end
+end
+
+-- How long a process has run, in seconds. A shared Chrome brings itself to the front while
+-- it starts and restores its windows, which isn't me opening it. (Asked of the process,
+-- since the app watcher can report its launch after that.)
+local STARTING = 20
+local function runningFor(pid)
+  local elapsed = hs.execute("/bin/ps -o etime= -p " .. pid):match("[%d:%-]+")
+  if not elapsed then return math.huge end
+  -- [[days-]hours:]minutes:seconds
+  local days, clock = elapsed:match("^(%d+)%-(.+)$")
+  local seconds = 0
+  for part in (clock or elapsed):gmatch("%d+") do seconds = seconds * 60 + tonumber(part) end
+  return (tonumber(days) or 0) * 86400 + seconds
+end
+local function agentChromes()
+  local found = {}
+  for _, app in ipairs(hs.application.applicationsForBundleID("com.google.Chrome")) do
+    local name = agentBrowser(app)
+    if name then found[name] = app end
+  end
+  return found
+end
+
+local watcher = hs.application.watcher
+FocusWatcher = watcher.new(function(_, event, app)
+  if event == watcher.activated or event == watcher.deactivated then updateBadge() end
+  if not (app and app:bundleID() == "com.google.Chrome") then return end
+  local name = agentBrowser(app)
+  if not name then return end
+  if event == watcher.activated then
+    if not opened(name) and runningFor(app:pid()) < STARTING then
+      app:hide()
+    else
+      -- I picked it, from the Dock or ⌘Tab.
+      setOpened(name, true)
+    end
+  elseif event == watcher.hidden then
+    setOpened(name, false)
+  elseif event == watcher.terminated then
+    owners[app:pid()] = nil
+  end
 end):start()
+
+-- One I haven't opened stays hidden. Chrome un-hides itself when it opens a window (as it
+-- starts, or for an agent's tab) without telling the app watcher, so this looks every
+-- second; it asks nothing of Chrome itself, which can be too busy to answer.
+KeepHidden = hs.timer.doEvery(1, function()
+  for name, app in pairs(agentChromes()) do
+    if not app:isHidden() and not opened(name) then app:hide() end
+  end
+end)
+
+-- For agent-browser-mode, through the `hs` tool: macOS lets only the app in front (or one
+-- with Hammerspoon's permissions) bring another app forward. True when that browser runs.
+AgentBrowsers = {
+  show = function(name)
+    setOpened(name, true)
+    local app = agentChromes()[name]
+    if not app then return false end
+    app:unhide()
+    -- Through its window: macOS ignores a request to activate an app that comes from one
+    -- that isn't in front, Hammerspoon included, but focusing a window still works. A
+    -- window that was hidden a moment ago takes a moment to be reachable.
+    local function focus(tries)
+      local window = app:mainWindow() or standardWindows(app)[1]
+      if window then
+        window:focus()
+      elseif tries > 0 then
+        hs.timer.doAfter(0.1, function() focus(tries - 1) end)
+      else
+        app:activate(true)
+      end
+    end
+    focus(20)
+    return true
+  end,
+  hide = function(name)
+    setOpened(name, false)
+    local app = agentChromes()[name]
+    if app then app:hide() end
+    return app ~= nil
+  end,
+}
 
 local lastSeen = {}
 HideTimer = hs.timer.doEvery(30, function()
-  for name, browser in pairs(agentBrowsers) do
-    local visible = hs.fs.attributes(browser.state .. "/visible")
-    local headless = hs.fs.attributes(HOME .. "/.config/agent-browser/" .. name .. "/headless")
-    local app
-    for _, a in ipairs(hs.application.applicationsForBundleID("com.google.Chrome")) do
-      if chromeOwner(a) == name then app = a end
-    end
-    if not (visible and headless and app) then
+  for _, app in ipairs(hs.application.applicationsForBundleID("com.google.Chrome")) do
+    local name = agentBrowser(app)
+    local visible = name and hs.fs.attributes(agentState(name) .. "/visible")
+    if name and not visible then
       lastSeen[name] = nil
-    else
+      -- Missed while Hammerspoon wasn't running, say.
+      if not app:isHidden() then app:hide() end
+    elseif name then
       if app:isFrontmost() or not lastSeen[name] then lastSeen[name] = os.time() end
-      -- A minute's grace after it's opened, while Chrome restarts and opens its window.
-      local settled = os.time() - visible.modification > 60
+      -- A moment's grace after it's opened, while it opens a window for its tab.
+      local settled = os.time() - visible.modification > 10
       if settled and (#standardWindows(app) == 0 or os.time() - lastSeen[name] > IDLE) then
         lastSeen[name] = nil
-        hs.task.new(HOME .. "/.dotfiles/home/bin/agent-browser-mode", nil, { name, "hide" }):start()
+        app:hide()
       end
     end
   end
 end)
+
 
 -- A Time Machine backup's progress in the menu bar ("Backup 17% · 4h 42m left") while one
 -- runs; gone the rest of the time. Clicking it shows the details. Its place, at the left end,
