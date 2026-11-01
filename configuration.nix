@@ -187,7 +187,7 @@
       extraFlags = [ "--force" ];
     };
     taps = [
-      "facebook/fb" # idb-companion
+      "meta/fb" # idb-companion (Facebook's tap, now under Meta)
       "cameroncooke/axe" # axe
     ];
     brews = [
@@ -214,7 +214,7 @@
     ]
     # These build against the full Xcode app, so a Mac without it yet leaves them out.
     ++ lib.optionals xcode [
-      "facebook/fb/idb-companion" # iOS simulator automation, for app tests
+      "meta/fb/idb-companion" # iOS simulator automation, for app tests
     ];
     casks = [
       "wezterm"

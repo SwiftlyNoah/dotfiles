@@ -9,6 +9,9 @@
 # Manager runs this on every switch; it only rebuilds a launcher that changed.
 emulate -L zsh
 setopt err_exit no_unset pipe_fail
+# Home Manager runs this with a PATH of its own Nix tools only. The macOS ones it uses
+# (shasum, sips, iconutil, codesign) are in /usr/bin.
+path+=(/usr/bin /bin /usr/sbin)
 source "${0:A:h:h}/lib/agent-browser.zsh"
 readonly MODE="$HOME/.dotfiles/home/bin/agent-browser-mode"
 

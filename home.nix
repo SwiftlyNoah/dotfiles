@@ -71,7 +71,10 @@ in
     file =
       lib.mapAttrs (_: path: { source = live path; }) {
         ".config/wezterm" = "home/.config/wezterm";
-        ".config/herdr" = "home/.config/herdr";
+        # The config and our chimes, not the folder: herdr keeps its sockets, logs and
+        # sessions beside them, which belong to this Mac, not to the repo.
+        ".config/herdr/config.toml" = "home/.config/herdr/config.toml";
+        ".config/herdr/sounds" = "home/.config/herdr/sounds";
         # The Mac's alert sound, the same "Lilac" as herdr's agent-needs-me chime (synth.py).
         "Library/Sounds/Lilac.aiff" = "home/Library/Sounds/Lilac.aiff";
         # VS Code writes here when a setting changes in its UI: those land in the repo too.
