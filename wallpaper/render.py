@@ -100,8 +100,10 @@ class Noise:
 
 
 class Scene:
-    def __init__(self, W: int, H: int, ss: int = 3):
+    def __init__(self, W: int, H: int, ss: int = 3, moons: tuple = ()):
+        """moons: extra (u, y) moon positions to keep clear of stars, beyond the frames' own."""
         self.W, self.H, self.ss = W, H, ss
+        self.extra_moons = moons
         self.s = H / REF_H  # pixels per point
         self.Wp = W / self.s  # width in points
         self.y0 = SHORE * H  # shoreline in pixels
@@ -293,7 +295,7 @@ class Scene:
         W, H = self.W, self.H
         rgbf = np.zeros((H, W, 3), np.float32)
         alpha = np.zeros((H, W), np.float32)
-        moons = [(f["moon"][0] * self.Wp, f["moon"][1]) for f in FRAMES if f.get("moon")]
+        moons = [(u * self.Wp, y) for u, y in [f["moon"][:2] for f in FRAMES if f.get("moon")] + list(self.extra_moons)]
         cols = [rgb("#e0def4"), rgb("#c4a7e7"), rgb("#ea9a97"), rgb("#9ccfd8")]
         count = int(900 * self.Wp / 1512)
         for _ in range(count):
