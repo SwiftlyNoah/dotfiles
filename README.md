@@ -22,7 +22,7 @@ flake, the live-linked `home/` folder, one `AGENTS.md` shared by every agent. Hi
 
 I call it **Lilac Moon**: dark, calm and soft. Everything on screen shares one palette and
 one font, and the same crescent moon shows up on the wallpaper, my desk mat and the wall.
-**[See the whole setup](https://swiftlynoah.github.io/dotfiles/)**, from the keyboard
+**[See the whole setup](https://noahbrauner.com/lilac-moon/)**, from the keyboard
 to the chimes.
 
 <p align="center">
@@ -358,6 +358,6 @@ home/
   lib/agent-browser.zsh   the shared browsers: ports, profiles, how Chrome starts
   lib/local-config.zsh    reads your own settings
   lib/agent-browser-mcp/  the browser server's npm pin
-docs/                     Lilac Moon, the whole setup as one page (GitHub Pages)
+docs/                     forwards the old GitHub Pages link to noahbrauner.com/lilac-moon
 .github/                  CI, the daily flake.lock update, Dependabot, README images
 ```
