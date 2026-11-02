@@ -1,0 +1,59 @@
+#!/bin/zsh
+# AWDL, the Wi-Fi link AirDrop, AirPlay, Sidecar, Universal Control and Continuity Camera
+# use, stays off because it causes lag bursts on calls (the awdl-guard job in
+# configuration.nix). This turns it on for a while, then the job turns it off again.
+#
+#   airdrop            on for 10 minutes
+#   airdrop 30         on for 30 minutes
+#   airdrop off        off now
+#   airdrop status     whether it is on, and until when
+emulate -L zsh
+setopt no_unset pipe_fail
+
+readonly dir="$HOME/Library/Application Support/awdl-guard"
+readonly allow="$dir/allow-until"
+
+is_up() { /sbin/ifconfig awdl0 | /usr/bin/grep -Eq 'flags=[0-9a-f]+<UP[,>]'; }
+
+until_time() { # the end time as a clock time, or nothing if no window is open
+  [[ -r $allow ]] || return 1
+  local v=$(<$allow)
+  [[ $v == <-> ]] && (( v > EPOCHSECONDS )) || return 1
+  print -r -- "$(/bin/date -r $v +%H:%M)"
+}
+
+zmodload zsh/datetime
+arg=${1:-10}
+
+case $arg in
+  off)
+    /bin/mkdir -p "$dir"
+    print 0 >| "$allow"
+    for i in {1..30}; do is_up || break; /bin/sleep 0.1; done
+    print "AirDrop off. Calls stay smooth."
+    ;;
+  status)
+    if t=$(until_time); then
+      print "AirDrop on until $t."
+    elif is_up; then
+      print "AWDL is up but no window is open: the awdl-guard job should turn it off within a second. If it stays up, check: sudo launchctl list | grep awdl-guard"
+    else
+      print "AirDrop off."
+    fi
+    ;;
+  <1-1440>)
+    /bin/mkdir -p "$dir"
+    print $(( EPOCHSECONDS + arg * 60 )) >| "$allow"
+    for i in {1..30}; do is_up && break; /bin/sleep 0.1; done
+    if is_up; then
+      print "AirDrop on until $(until_time). Run 'airdrop off' when you're done, or before a call."
+    else
+      print "AirDrop should be on until $(until_time), but AWDL didn't come up. Is the awdl-guard job running? sudo launchctl list | grep awdl-guard" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    print "usage: airdrop [minutes | off | status]" >&2
+    exit 2
+    ;;
+esac

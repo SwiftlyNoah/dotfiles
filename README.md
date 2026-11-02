@@ -98,6 +98,7 @@ File paths that agents print (`lib/api/requestAPI.ts:142`) open in VS Code at th
 | `mac-check` | my Mac's security checklist (below) |
 | `mac-update` | update everything (below) |
 | `mac-tidy` | clear what builds, browsers and agents left behind (below); `--dry-run` lists it |
+| `airdrop` | turn on AirDrop (and AirPlay, Sidecar, Universal Control) for 10 minutes; `airdrop 30`, `airdrop off`, `airdrop status`. It stays off otherwise: its Wi-Fi link causes lag bursts on video calls (the `awdl-guard` job in `configuration.nix`) |
 
 **Apps and tools**:
 
