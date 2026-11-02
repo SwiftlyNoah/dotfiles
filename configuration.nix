@@ -145,6 +145,40 @@
     reattach = true;
   };
 
+  # AWDL (the Wi-Fi link behind AirDrop, AirPlay, Sidecar, Universal Control and
+  # Continuity Camera) pulls the Wi-Fi radio off the network every ~13 seconds while it is
+  # up, a 1.5 second lag burst that freezes video calls (measured in Stone Hall: pings to
+  # the first campus router went from 23 of 200 over 100 ms to 1). So it stays down, and
+  # `airdrop` (home/bin/airdrop) opens a window of minutes by writing an end time to the
+  # file below. The job is root because only root can bring the interface up or down; it
+  # reads that file as a number and nothing else.
+  launchd.daemons.awdl-guard = {
+    script = ''
+      allow="/Users/${user}/Library/Application Support/awdl-guard/allow-until"
+      last=down
+      while :; do
+        end=0
+        if [ -f "$allow" ]; then
+          v=$(/usr/bin/head -c 20 "$allow" | /usr/bin/tr -cd '0-9')
+          if [ -n "$v" ] && [ ''${#v} -le 12 ]; then end=$v; fi
+        fi
+        if [ "$end" -gt "$(/bin/date +%s)" ]; then want=up; else want=down; fi
+        if /sbin/ifconfig awdl0 | /usr/bin/grep -Eq 'flags=[0-9a-f]+<UP[,>]'; then is=up; else is=down; fi
+        if [ "$want" = down ] && [ "$is" = up ]; then
+          /sbin/ifconfig awdl0 down
+        elif [ "$want" = up ] && [ "$last" = down ] && [ "$is" = down ]; then
+          /sbin/ifconfig awdl0 up
+        fi
+        last=$want
+        /bin/sleep 1
+      done
+    '';
+    serviceConfig = {
+      RunAtLoad = true;
+      KeepAlive = true;
+    };
+  };
+
   # home-manager owns the interactive shell (home.nix). Left on, nix-darwin's /etc/zshrc
   # runs its own compinit with a different fpath, so the two rewrite ~/.zcompdump on
   # every launch (about 1.5s per new shell), and loads a prompt starship then replaces.
