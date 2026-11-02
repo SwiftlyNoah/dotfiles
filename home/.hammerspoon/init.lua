@@ -339,6 +339,32 @@ end
 updateBackup()
 BackupTimer = hs.timer.doEvery(15, updateBackup)
 
+-- A display plugged in (or switched to a new resolution) gets the Lilac Moon wallpaper on its
+-- own: wallpaper/new-displays.sh builds the size if it's new (about a minute) and sets it.
+-- Plugging in sends a burst of events, so it runs once things have been quiet for 3 seconds.
+local wallpaperTask, wallpaperAgain
+local function wallpaperForDisplays()
+  -- A change during a build runs it once more afterward, for a display plugged in meanwhile.
+  if wallpaperTask and wallpaperTask:isRunning() then wallpaperAgain = true return end
+  wallpaperTask = hs.task.new("/bin/sh", function(code, built, err)
+    if code ~= 0 then
+      hs.notify.new({ title = "Wallpaper", informativeText = "Couldn't set up the new display's wallpaper: run ~/.dotfiles/wallpaper/new-displays.sh to see why." }):send()
+      print("wallpaper: new-displays.sh exited " .. code .. "\n" .. (err or ""))
+    elseif built ~= "" then
+      hs.notify.new({ title = "Wallpaper", informativeText = "Lilac Moon is on the new display." }):send()
+    end
+    if wallpaperAgain then
+      wallpaperAgain = false
+      hs.timer.doAfter(0, wallpaperForDisplays)
+    end
+  end, { HOME .. "/.dotfiles/wallpaper/new-displays.sh" })
+  wallpaperTask:start()
+end
+local wallpaperDelay = hs.timer.delayed.new(3, wallpaperForDisplays)
+DisplayWatcher = hs.screen.watcher.new(function() wallpaperDelay:start() end):start()
+-- Also at login and on each reload, for a display plugged in while Hammerspoon wasn't running.
+wallpaperDelay:start()
+
 -- This file is a live link into the dotfiles repo: watch the real file, and reload on a save.
 ConfigWatcher = hs.pathwatcher.new(hs.fs.pathToAbsolute(hs.configdir .. "/init.lua"), hs.reload):start()
 hs.autoLaunch(true)
