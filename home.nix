@@ -101,6 +101,12 @@ in
     run ${config.home.homeDirectory}/.dotfiles/home/bin/agent-browser-launchers
   '';
 
+  # Noah's Mac, the menu bar app (apps/noahs-mac), built from source when it changed and
+  # installed to ~/Applications before its launch agent loads.
+  home.activation.noahsMac = lib.hm.dag.entryBetween [ "setupLaunchAgents" ] [ "writeBoundary" ] ''
+    run ${config.home.homeDirectory}/.dotfiles/apps/noahs-mac/build.sh
+  '';
+
   # VS Code's theme (home/vscode/settings.json picks it). Its own updater keeps it current.
   home.activation.vscodeTheme = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     code=/opt/homebrew/bin/code
@@ -110,7 +116,7 @@ in
   '';
 
   # The menu bar, left to right: a Time Machine backup's progress while one runs (Hammerspoon),
-  # Cisco Secure Client (the VPN), Maccy, Amphetamine, Noah's
+  # Cisco Secure Client (the VPN), Maccy, Amphetamine, Noah's Mac, Noah's
   # Pool, Now Playing, Wi-Fi, Battery, Control Center, Clock. macOS 27 keeps the order here,
   # as each item's distance from the right edge, and rewrites it when an icon is ⌘-dragged.
   # (configuration.nix can't write it: nix-darwin splits the path at its space.)
@@ -123,6 +129,7 @@ in
       module:WiFi -float 225 \
       module:NowPlaying -float 250 \
       status:NoahsPool::Item-0 -float 300 \
+      status:NoahsMac::Item-0 -float 320 \
       status:com.if.Amphetamine::Amphetamine -float 340 \
       status:org.p0deje.Maccy::Item-0 -float 380 \
       status:com.cisco.secureclient.gui::Item-0 -float 700 \
@@ -193,7 +200,22 @@ in
             };
           }) localConfig.browsers
         )
-      );
+      )
+    // {
+      # Noah's Mac, the menu bar app, from login on. Quit from its menu stays quit until the
+      # next login; a crash starts it again.
+      noahs-mac = {
+        enable = true;
+        config = {
+          ProgramArguments = [ "${config.home.homeDirectory}/Applications/Noah's Mac.app/Contents/MacOS/NoahsMac" ];
+          RunAtLoad = true;
+          KeepAlive.SuccessfulExit = false;
+          ProcessType = "Interactive";
+          StandardOutPath = "${config.home.homeDirectory}/Library/Logs/noahs-mac.log";
+          StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/noahs-mac.log";
+        };
+      };
+    };
 
   fonts.fontconfig.enable = true;
   # The home-configuration.nix(5) man page. Building it warns on every rebuild (an

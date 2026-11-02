@@ -44,6 +44,11 @@ to the chimes.
   gets one built for its size, on its own: plug in a new monitor and Hammerspoon has it
   wearing Lilac Moon about a minute later. `wallpaper/deskmat.py` paints the same night lake
   as the print file for the desk mat.
+- **Noah's Mac in the menu bar** (the moon, [`apps/noahs-mac`](apps/noahs-mac)): whether
+  my portal is up, with Open Portal (⌘O) and Copy Link; AirDrop on for 10, 30 or 60 minutes
+  (the moon turns into radio waves while it's on); and the wallpaper following the sun or
+  held at any of its twelve times, each shown as a thumbnail. Built from source with
+  `swiftc` on every rebuild that changes it, and started at login.
 - **One sound for "something needs me":** "Lilac", two soft falling marimba notes, both
   when an agent has a question and as the Mac's alert.
 - **A quiet [herdr](https://herdr.dev) sidebar:** one line per agent (a gold dot while it
@@ -348,6 +353,7 @@ rebuild.sh                apply the config (the first time too)
 local.example.json        the format of your own settings (local/, ignored here)
 palette.json              Lilac Moon's colors, the one source (palette.py checks the configs)
 wallpaper/                the dynamic wallpaper and the desk mat's print file
+apps/noahs-mac/           Noah's Mac, the menu bar app (build.sh builds and installs it)
 home/
   AGENTS.md               rules for every coding agent
   .claude/                Claude Code settings, hooks and status line
