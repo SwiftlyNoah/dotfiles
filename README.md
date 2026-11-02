@@ -40,8 +40,9 @@ to the chimes.
 - **A wallpaper that follows the sun:** [`wallpaper/`](wallpaper) paints a lilac crescent
   over a pine lake in twelve frames, from midnight through dawn, day, sunset and blue hour,
   and packs them into one dynamic wallpaper. macOS shows the frame that matches where the
-  sun really is, so the lake goes dark at the actual dusk, in any season. Every connected
-  display gets one built for its size. `wallpaper/deskmat.py` paints the same night lake
+  sun really is, so the lake goes dark at the actual dusk, in any season. Every display
+  gets one built for its size, on its own: plug in a new monitor and Hammerspoon has it
+  wearing Lilac Moon about a minute later. `wallpaper/deskmat.py` paints the same night lake
   as the print file for the desk mat.
 - **One sound for "something needs me":** "Lilac", two soft falling marimba notes, both
   when an agent has a question and as the Mac's alert.
