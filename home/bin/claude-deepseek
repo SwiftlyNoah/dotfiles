@@ -1,0 +1,58 @@
+#!/bin/zsh
+# Claude Code running on DeepSeek's current model through its Anthropic-compatible API, for
+# cheap agent work. Same CLAUDE.md, skills and settings as my pool sessions, but no Claude
+# account is used: every request goes to api.deepseek.com and is billed to my DeepSeek balance.
+#
+#   claude-deepseek [--pro] [claude args...]
+#
+#   default  deepseek-flash (DeepSeek-V4.1-Flash, 1M context): about $0.15 in / $0.60 out
+#            per million tokens off-peak, double at peak (01-04 and 06-10 UTC on weekdays)
+#   --pro    deepseek-v4-pro for the main model: about 4x the price
+#
+# The API key lives in the login Keychain, never in a file or this repo. Add it once with
+#   security add-generic-password -U -s deepseek-api -a "$USER" -w
+# (it prompts for the key). Create the key and add credit at platform.deepseek.com.
+#
+# Everything the agent reads is sent to DeepSeek's servers in China, so it refuses to start
+# in folders whose data must stay on this Mac. Claude Code's /cost shows Anthropic's prices,
+# not DeepSeek's; the real spend is on platform.deepseek.com.
+emulate -L zsh
+setopt err_exit no_unset pipe_fail
+
+model='deepseek-flash[1m]'
+if [[ ${1:-} == --pro ]]; then
+  model='deepseek-v4-pro[1m]'
+  shift
+fi
+
+here=${PWD:A}/
+for private in ~/me ~/medical ~/coding/appier ~/coding/noah-os; do
+  if [[ $here == ${private:A}/* ]]; then
+    print -u2 -- "claude-deepseek: not in ${private/#$HOME/~}: its data must not leave this Mac"
+    exit 1
+  fi
+done
+
+if ! key=$(security find-generic-password -s deepseek-api -a "$USER" -w 2>/dev/null); then
+  print -u2 -- 'claude-deepseek: no DeepSeek API key in the Keychain. Add it with:'
+  print -u2 -- '  security add-generic-password -U -s deepseek-api -a "$USER" -w'
+  exit 1
+fi
+
+# Started from a pool session, it would inherit that session's account and pool signals:
+# drop them, so this is a plain session that only talks to DeepSeek.
+for var in ${(k)parameters[(I)CLAUDE_POOL_*]} ${(k)parameters[(I)CLAUDE_CODE_*]} \
+  CLAUDECODE CLAUDE_PID CLAUDE_EFFORT ANTHROPIC_API_KEY; do
+  unset $var
+done
+
+export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+export ANTHROPIC_AUTH_TOKEN=$key
+export ANTHROPIC_MODEL=$model
+export ANTHROPIC_DEFAULT_OPUS_MODEL=$model
+export ANTHROPIC_DEFAULT_SONNET_MODEL=$model
+export ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-flash
+export CLAUDE_CODE_SUBAGENT_MODEL=deepseek-flash
+export CLAUDE_CODE_AUTO_COMPACT_WINDOW=786432
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+exec claude "$@"
