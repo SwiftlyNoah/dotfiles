@@ -1,0 +1,45 @@
+#!/bin/zsh
+# Cisco Secure Client, the VPN. Its window opens from the menu bar shield, but the menu bar
+# auto-hides here, and the app can freeze after a login launch: it keeps running with no
+# window, no icon and no answer to AppleScript. This opens the window, restarting a frozen
+# app first. Closing the app never drops a connection: vpnagentd holds the tunnel.
+# You type your own username, password and second factor in the window.
+#
+#   vpn                open the window (restarts the app if it is frozen)
+#   vpn status         connected or not
+#   vpn disconnect     disconnect
+emulate -L zsh
+setopt no_unset pipe_fail
+
+readonly app="/Applications/Cisco/Cisco Secure Client.app"
+readonly cli=/opt/cisco/secureclient/bin/vpn
+readonly proc="Cisco Secure Client"
+
+[[ -d $app && -x $cli ]] || { print -u2 "Cisco Secure Client is not installed."; exit 1; }
+
+# The Cisco command line, stopped after 20 seconds if the VPN service does not answer.
+cisco() { print -l -- "$@" | /usr/bin/perl -e 'alarm 20; exec @ARGV' "$cli" -s; }
+
+state() { cisco state | /usr/bin/awk -F'state: ' '/>> state:/ { s = $2 } END { print s }'; }
+
+# Whether the app answers: a frozen one never replies, so give it 5 seconds.
+responsive() {
+  /usr/bin/perl -e 'alarm 5; exec @ARGV' /usr/bin/osascript \
+    -e "tell application \"System Events\" to count windows of process \"$proc\"" &>/dev/null
+}
+
+case ${1:-open} in
+  open)
+    if /usr/bin/pgrep -qx "$proc" && ! responsive; then
+      print "Cisco Secure Client was frozen. Restarting it."
+      /usr/bin/pkill -x "$proc"
+      for i in {1..50}; do /usr/bin/pgrep -qx "$proc" || break; /bin/sleep 0.1; done
+      /usr/bin/pkill -9 -x "$proc" 2>/dev/null
+    fi
+    /usr/bin/open -a "$app"
+    print "Cisco Secure Client is open ($(state)). Sign in from its window."
+    ;;
+  status) print -r -- "$(state)" ;;
+  disconnect) cisco disconnect >/dev/null; print -r -- "$(state)" ;;
+  *) print -u2 "usage: vpn [status|disconnect]"; exit 2 ;;
+esac

@@ -104,6 +104,7 @@ File paths that agents print (`lib/api/requestAPI.ts:142`) open in VS Code at th
 | `mac-update` | update everything (below) |
 | `mac-tidy` | clear what builds, browsers and agents left behind (below); `--dry-run` lists it |
 | `airdrop` | turn on AirDrop (and AirPlay, Sidecar, Universal Control) for 10 minutes; `airdrop 30`, `airdrop off`, `airdrop status`. It stays off otherwise: its Wi-Fi link causes lag bursts on video calls (the `awdl-guard` job in `configuration.nix`) |
+| `vpn` | open Cisco Secure Client's window to connect, restarting the app if it froze (it can after a login launch, with no window or menu bar icon); `vpn status`, `vpn disconnect`. You sign in yourself |
 
 **Apps and tools**:
 
@@ -362,7 +363,7 @@ home/
   .config/herdr/          herdr's config and chimes (its runtime files aren't tracked)
   .hammerspoon/           app hotkeys (⌘⇧ A Chrome, D Messages, X Xcode, C Claude, + your profiles)
   bin/                    mac-check, mac-update, github-setup, claude-setup,
-                          agent-browser-mcp, agent-browser-chrome, work-bootstrap
+                          agent-browser-mcp, agent-browser-chrome, work-bootstrap, vpn
   lib/agent-browser.zsh   the shared browsers: ports, profiles, how Chrome starts
   lib/local-config.zsh    reads your own settings
   lib/agent-browser-mcp/  the browser server's npm pin
