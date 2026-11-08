@@ -82,7 +82,7 @@ in
         # The file, not the folder: Hammerspoon keeps its Spoons beside it.
         ".hammerspoon/init.lua" = "home/.hammerspoon/init.lua";
         ".claude/settings.json" = "home/.claude/settings.json";
-        # One file at a time: herdr owns ~/.claude/hooks/herdr-agent-state.sh beside these.
+        # One file at a time: herdr-agent-state.sh beside these is herdr's (herdrClaudeHook).
         ".claude/hooks/auto-accept.sh" = "home/.claude/hooks/auto-accept.sh";
         ".claude/hooks/herdr-cc-resume.sh" = "home/.claude/hooks/herdr-cc-resume.sh";
         # Codex and opencode read this directly. Claude reads it through ~/.claude/CLAUDE.md,
@@ -105,6 +105,27 @@ in
   # installed to ~/Applications before its launch agent loads.
   home.activation.noahsMac = lib.hm.dag.entryBetween [ "setupLaunchAgents" ] [ "writeBoundary" ] ''
     run ${config.home.homeDirectory}/.dotfiles/apps/noahs-mac/build.sh
+  '';
+
+  # herdr's Claude hook (herdr-agent-state.sh), which shows each agent's state in its sidebar.
+  # `herdr integration install claude` would also add its own settings.json entry, with this
+  # Mac's home folder written out, to the tracked home/.claude/settings.json. So install it
+  # into a throwaway home and copy just the script; the tracked entry finds it by $HOME and
+  # does nothing until it exists.
+  home.activation.herdrClaudeHook = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    herdr=/opt/homebrew/bin/herdr
+    if [ -x "$herdr" ]; then
+      tmp=$(mktemp -d)
+      mkdir "$tmp/.claude" # herdr installs only where Claude Code is
+      if HOME="$tmp" "$herdr" integration install claude >/dev/null 2>&1; then
+        dest="$HOME/.claude/hooks/herdr-agent-state.sh"
+        if ! cmp -s "$tmp/.claude/hooks/herdr-agent-state.sh" "$dest"; then
+          run mkdir -p "$HOME/.claude/hooks"
+          run install -m 755 "$tmp/.claude/hooks/herdr-agent-state.sh" "$dest"
+        fi
+      fi
+      rm -rf "$tmp"
+    fi
   '';
 
   # VS Code's theme (home/vscode/settings.json picks it). Its own updater keeps it current.
@@ -207,7 +228,9 @@ in
       noahs-mac = {
         enable = true;
         config = {
-          ProgramArguments = [ "${config.home.homeDirectory}/Applications/Noah's Mac.app/Contents/MacOS/NoahsMac" ];
+          ProgramArguments = [
+            "${config.home.homeDirectory}/Applications/Noah's Mac.app/Contents/MacOS/NoahsMac"
+          ];
           RunAtLoad = true;
           KeepAlive.SuccessfulExit = false;
           ProcessType = "Interactive";
@@ -238,6 +261,12 @@ in
         autoload -Uz add-zsh-hook
         add-zsh-hook chpwd _osc7_cwd
         _osc7_cwd
+
+        # Claude Code (`cc <session id>` resumes one): through the shared account pool, with
+        # its saved defaults, when home/bin/claude-setup set one up; plain claude otherwise.
+        cc() {
+          if (( $+commands[claude-pool] )); then claude-pool "$@"; else claude "$@"; fi
+        }
       '';
       shellAliases = {
         ".." = "cd ..";
@@ -246,9 +275,6 @@ in
         gp = "git push";
         pull = "git pull";
         m = "git switch main";
-        # Claude Code through the shared account pool (`cc <session id>` resumes one), with
-        # the pool's saved defaults, which home/bin/claude-setup sets.
-        cc = "claude-pool";
         co = "codex --full-auto";
         stop = "herdr server stop";
       };

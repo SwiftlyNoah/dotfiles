@@ -4,9 +4,12 @@
 #
 #   1. ~/.claude/CLAUDE.md: this Mac's own instructions file, which imports the shared
 #      home/AGENTS.md, and local/CLAUDE.md (your private notes) when you have one
-#   2. claude-pool: the shared account pool, its menu bar, and this Mac's pool key
-#   3. the flags every session starts with (`cc`)
-#   4. the shared browsers sessions drive (home/bin/agent-browser-mcp) in place of Claude
+#   2. claude-pool: the shared account pool, its menu bar, and this Mac's pool key, plus
+#      the flags every session starts with (`cc`). Optional: it needs read access to the
+#      pool's private repo ("claudePool" in your own settings). Without it, this step is
+#      skipped and `cc` starts plain `claude` on your own login; run this again once you
+#      have one.
+#   3. the shared browsers sessions drive (home/bin/agent-browser-mcp) in place of Claude
 #      in Chrome, and the other MCP servers every session has (Figma)
 #
 # The person at the Mac still does the sign-ins: GitHub (`gh auth login`), Claude
@@ -14,7 +17,6 @@
 emulate -L zsh
 setopt err_exit no_unset pipe_fail
 
-readonly NAME=${CLAUDE_POOL_NAME:-noah}
 readonly POOL_REPO="$HOME/coding/claude-pool"
 readonly BROWSER_MCP="$HOME/.dotfiles/home/bin/agent-browser-mcp"
 readonly CLAUDE_MD="$HOME/.claude/CLAUDE.md"
@@ -22,6 +24,9 @@ readonly IMPORT="@~/.dotfiles/home/AGENTS.md"
 readonly LOCAL_NOTES="$HOME/.dotfiles/local/CLAUDE.md"
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 source "${0:A:h:h}/lib/local-config.zsh"
+# The pool's GitHub repo, and your member name in it (CLAUDE_POOL_NAME overrides it).
+readonly POOL_GITHUB=$(local_config .claudePool.repo)
+readonly NAME=${CLAUDE_POOL_NAME:-$(local_config .claudePool.name)}
 
 gh auth status >/dev/null 2>&1 || { print -- "Sign in to GitHub first: gh auth login, then run claude-setup again."; exit 1; }
 
@@ -37,18 +42,28 @@ fi
 print -- "  imports home/AGENTS.md"
 
 print -- "==> claude-pool"
-[[ -d $POOL_REPO/.git ]] || gh repo clone SwiftlyNoah/claude-pool "$POOL_REPO"
-"$POOL_REPO/claude-pool" install --name "$NAME" --menubar
-claude-pool instructions --install
+pool=false
+if [[ -z $POOL_GITHUB ]]; then
+  print -- "  skipped: no pool in your settings (claudePool). \`cc\` starts plain claude."
+elif [[ -d $POOL_REPO/.git ]] || gh repo clone "$POOL_GITHUB" "$POOL_REPO" 2>/dev/null; then
+  pool=true
+  "$POOL_REPO/claude-pool" install --name "${NAME:-$USER}" --menubar
+  claude-pool instructions --install
+else
+  print -- "  skipped: can't read $POOL_GITHUB with this GitHub account. \`cc\` starts plain"
+  print -- "  claude on your own login. Run claude-setup again once you have access."
+fi
 
-print -- "==> session defaults"
-# No --chrome: every session uses the shared browser, on whichever account it runs.
-# Plus a settings file of your own ("claudeSettings" in the local config), such as a work
-# repo's auto-mode rules, once it's on this Mac.
-local -a flags=(-d)
-settings=$(local_path "$(local_config .claudeSettings)")
-[[ -n $settings && -r $settings ]] && flags+=(--settings "$settings")
-claude-pool defaults "${flags[@]}"
+if $pool; then
+  print -- "==> session defaults"
+  # No --chrome: every session uses the shared browser, on whichever account it runs.
+  # Plus a settings file of your own ("claudeSettings" in the local config), such as a work
+  # repo's auto-mode rules, once it's on this Mac.
+  local -a flags=(-d)
+  settings=$(local_path "$(local_config .claudeSettings)")
+  [[ -n $settings && -r $settings ]] && flags+=(--settings "$settings")
+  claude-pool defaults "${flags[@]}"
+fi
 
 print -- "==> shared browser"
 if claude mcp get browser >/dev/null 2>&1; then
@@ -73,13 +88,8 @@ fi
 # notes (local/CLAUDE.md: what each browser is signed in to, for one). It lives here,
 # between markers, rather than in the pool's note: that note goes to every pool member, and
 # these lines are only true on a Mac set up from this repo. Rewritten in place on every run.
-note=$(cat <<'EOF'
-<!-- dotfiles:browser:start -->
-## Shared browser and the pool
-
-- Browser work never needs my own seat: the shared browser works on every pool account.
-EOF
-)
+note='<!-- dotfiles:browser:start -->'
+$pool && note+=$'\n## Shared browser and the pool\n\n- Browser work never needs my own seat: the shared browser works on every pool account.'
 [[ -f $LOCAL_NOTES ]] && note+=$'\n\n@~/.dotfiles/local/CLAUDE.md'
 note+=$'\n<!-- dotfiles:browser:end -->'
 { awk '/<!-- dotfiles:browser:start -->/ { skip = 1 } !skip { print } /<!-- dotfiles:browser:end -->/ { skip = 0 }' "$CLAUDE_MD"

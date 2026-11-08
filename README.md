@@ -82,6 +82,33 @@ same versions of everything. There are two kinds of config in here:
 - **Live files** (everything in `home/`). My actual settings files are linked straight into
   this repo, so saving one changes my Mac on the spot. No rebuild.
 
+## What you get
+
+Install this and you get all of it: everything on this page, from the macOS settings to the
+apps, the shell, the look and the agent setup. It's built around two pieces of agent plumbing.
+Both are optional, and both can be set up later:
+
+- **A shared browser**: a Chrome with its own profile that every Claude session drives, so
+  you sign in to your sites once and every agent can use them. You get one, empty and
+  signed in to nothing, called Agent Browser. Mine (a work one and a personal one, and what
+  each is signed in to) live in my private settings, so they aren't part of it. Add your own
+  in `browsers` ([Your own settings](#your-own-settings)).
+- **A Claude account pool**: [`claude-pool`](https://github.com/SwiftlyNoah/claude-pool)
+  (private) moves a session to a teammate's account when yours runs low. Without access to
+  it, `claude-setup` skips it, `cc` starts plain `claude` on your own login, and nothing
+  else changes. Once you have access to a pool, add `claudePool` to your settings and run
+  `home/bin/claude-setup` again.
+
+What you don't get: anything in my private `local/` (my browsers and their sign-ins, my work
+repos, my private notes for agents, my backup disks), and no passwords, keys or sign-ins of
+any kind. Apps I installed by hand aren't in it either: Cisco Secure Client (the `vpn`
+command just says it isn't installed), Amphetamine and ColorSlurp.
+
+What's still mine until you change it ([Make it yours](#make-it-yours)): the git name and
+email, the `user` in `flake.nix` (bootstrap offers to set it), my rules for agents in
+`home/AGENTS.md`, and Noah's Mac, the menu bar app (its portal item looks for my own site's
+server, which yours won't have).
+
 ## What's on my Mac
 
 **macOS**: dark mode, fast key repeat, Dock and menu bar hidden (Dock on the left), Finder in
@@ -97,7 +124,8 @@ File paths that agents print (`lib/api/requestAPI.ts:142`) open in VS Code at th
 
 | Type | Runs |
 | --- | --- |
-| `cc` | Claude Code, through my account pool (`cc <session id>` picks a session back up) |
+| `cc` | Claude Code, through the account pool when one is set up, plain `claude` otherwise (`cc <session id>` picks a session back up) |
+| `claude-deepseek` | Claude Code on DeepSeek's API, for cheap agent work: no Claude account is used, and the API key lives in the Keychain (`--pro` for the bigger model) |
 | `co` | Codex in full-auto mode |
 | `ga`, `gc`, `gp`, `pull`, `m` | `git add .`, `git commit -m`, `git push`, `git pull`, `git switch main` |
 | `mac-check` | my Mac's security checklist (below) |
@@ -112,8 +140,8 @@ File paths that agents print (`lib/api/requestAPI.ts:142`) open in VS Code at th
 | --- | --- | --- |
 | Nix | `home.nix` | Node 24, Python 3.14, uv, ripgrep, fd, fzf, jq, lazygit, gitleaks, delta, git + LFS, Maple Mono |
 | npm (latest, in `~/.npm-global`) | `NPM_GLOBALS` in `home/bin/mac-update` | eas-cli, firebase-tools, vercel |
-| Homebrew | `brews` in `configuration.nix` | herdr, gh, age, php, CocoaPods, fastlane, OpenJDK 21, idb-companion, AXe, ffmpeg, tectonic, poppler, tidy, cliclick, terminal-notifier |
-| Homebrew casks | `casks` in `configuration.nix` | WezTerm, 1Password + CLI, Chrome, VS Code, Codex, Xcodes, Proxyman, Google Cloud CLI, AltTab, Hammerspoon, Maccy, LuLu, BlockBlock, OverSight |
+| Homebrew | `brews` in `configuration.nix` | herdr, gh, age, php, CocoaPods, fastlane, OpenJDK 21, idb-companion, AXe, ffmpeg, tectonic, poppler, tidy, cliclick, terminal-notifier, xcodegen, cloudflared |
+| Homebrew casks | `casks` in `configuration.nix` | WezTerm, 1Password + CLI, Chrome, VS Code, Codex, Xcodes, Proxyman, Google Cloud CLI, AltTab, Hammerspoon, Maccy, LuLu, BlockBlock, OverSight, Tailscale |
 | Official installer | `bootstrap.sh` | Claude Code (it updates itself) |
 
 > [!WARNING]
@@ -173,7 +201,8 @@ fine way to start.
 - **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port, and
   the `folders` whose sessions use it; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
   (`chromeProfiles`), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
-  file every session starts with (`claudeSettings`), the dates `mac-update` leaves
+  file every session starts with (`claudeSettings`), your Claude account pool (`claudePool`:
+  its GitHub `repo` and your member `name` in it; leave it `null` for none), the dates `mac-update` leaves
   alone (`deployDays`), folders `mac-tidy` keeps a copy of on an external disk
   (`copies`: each a `from` folder and a `to` under `/Volumes`), and a disk for what isn't
   expected to be used again (`archive`).
@@ -278,9 +307,14 @@ of that:
   imports this one, and holds the parts that shouldn't be public.
 - **The account pool**: [`claude-pool`](https://github.com/SwiftlyNoah/claude-pool)
   (private) runs sessions on my own seat, with backup accounts for when I run out, and shows
-  every account's usage in a menu bar app. `home/bin/claude-setup` installs it, saves the
-  flags `cc` starts with, registers the shared browser and Figma, and turns Claude in
-  Chrome off (sessions use the shared browser instead).
+  every account's usage in a menu bar app. `home/bin/claude-setup` installs it when your
+  settings name one (`claudePool`) and your GitHub account can read it, and saves the flags
+  `cc` starts with. Without one it skips that step, and the rest works the same.
+- **`home/bin/claude-setup`** also writes `~/.claude/CLAUDE.md` (importing
+  `home/AGENTS.md`), registers the shared browser, turns Claude in Chrome off (sessions use
+  the shared browser instead), and registers Figma's MCP server
+  (`https://mcp.figma.com/mcp`), so any session can read and edit Figma files. Figma asks you to sign in the first time a
+  session uses it (`/mcp`); until then it does nothing.
 - **The shared browsers**: `home/bin/agent-browser-mcp` connects Google's
   [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) to a Chrome
   with its own profile, so every agent session, on any account, drives the same signed-in
@@ -326,8 +360,8 @@ Fork it, then:
 - **`home/AGENTS.md`**: my rules for agents. Rewrite them.
 - **`configuration.nix`**: the Homebrew lists and the Dock. Read the zap warning above
   first.
-- **`home/bin/claude-setup`**: assumes my account pool. Skip bootstrap step 6 if you don't
-  have one.
+- **The account pool**: leave `claudePool` out of your settings unless you have one.
+  `claude-setup` then skips it, and `cc` is plain `claude`.
 
 ## When something goes wrong
 
