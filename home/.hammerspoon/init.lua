@@ -3,8 +3,8 @@
 -- ⌘⇧Space stays unbound: macOS keeps it for the Screenshot app's visual intelligence.
 --
 -- Your own parts come from the local config (home/lib/local-config.zsh): the shared
--- browsers, and "chromeProfiles", a ⌘⇧ key for each Chrome profile of yours (one on A
--- takes ⌘⇧A for that profile's windows only).
+-- browsers (each with an optional "key", its ⌥ key), and "chromeProfiles", a ⌘⇧ key for
+-- each Chrome profile of yours (one on A takes ⌘⇧A for that profile's windows only).
 
 -- First, so the `hs` command line tool (inside Hammerspoon.app) works even if a later line fails.
 require("hs.ipc")
@@ -276,6 +276,23 @@ AgentBrowsers = {
     return app ~= nil
   end,
 }
+
+-- A shared browser's "key" in the local config opens it with ⌥ and that key, the way its
+-- launcher does (agent-browser-mode, which also waits for a Chrome that is restarting).
+-- Pressed again while it is in front, it steps through its windows like the app hotkeys.
+-- ⌥ plus a letter types a character on a Mac keyboard (⌥E is the acute accent), so each one
+-- bound here no longer types its character anywhere.
+for _, browser in ipairs(localConfig.browsers) do
+  if browser.key then
+    hs.hotkey.bind({ "alt" }, browser.key, function()
+      local front = hs.application.frontmostApplication()
+      if front and agentBrowser(front) == browser.id and cycle(standardWindows(front), front:focusedWindow()) then
+        return
+      end
+      hs.task.new(HOME .. "/.dotfiles/home/bin/agent-browser-mode", nil, { browser.id, "show" }):start()
+    end)
+  end
+end
 
 local lastSeen = {}
 HideTimer = hs.timer.doEvery(30, function()
