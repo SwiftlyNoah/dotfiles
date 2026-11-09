@@ -198,8 +198,9 @@ ignores. Moving to a new Mac brings it along with no copying. Without one, every
 on [`local.example.json`](local.example.json), and copying that to `local/config.json` is a
 fine way to start.
 
-- **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port, and
-  the `folders` whose sessions use it; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
+- **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port,
+  the `folders` whose sessions use it, and `everySession` to give every session it too, as
+  `<id>-browser`; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
   (`chromeProfiles`), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
   file every session starts with (`claudeSettings`), your Claude account pool (`claudePool`:
   its GitHub `repo` and your member `name` in it; leave it `null` for none), the dates `mac-update` leaves

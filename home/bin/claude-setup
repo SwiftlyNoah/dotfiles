@@ -71,6 +71,16 @@ if claude mcp get browser >/dev/null 2>&1; then
 else
   claude mcp add -s user browser -- "$BROWSER_MCP"
 fi
+# A browser marked "everySession" in the local config is also every session's, wherever it
+# runs, as its own server (<id>-browser): for the work it is signed in to, whatever the
+# folder. The others stay with their folders.
+for id in ${(f)"$(local_config '.browsers[] | select(.everySession) | .id')"}; do
+  if claude mcp get "$id-browser" >/dev/null 2>&1; then
+    print -- "  the $id-browser MCP is registered"
+  else
+    claude mcp add -s user "$id-browser" -- "$BROWSER_MCP" "$id"
+  fi
+done
 # Claude in Chrome would give sessions a second browser, my personal one, and only on my
 # own account. Its switch lives in ~/.claude.json, beside the MCP servers.
 if [[ $(jq '.claudeInChromeDefaultEnabled' ~/.claude.json 2>/dev/null) != false ]]; then

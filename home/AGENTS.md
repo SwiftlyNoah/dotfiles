@@ -21,7 +21,9 @@
 ## Shared browser
 
 Claude sessions share one browser: the `browser` MCP tools (`mcp__browser__*`), which drive
-a dedicated Chrome profile signed in to the sites I work in. Use it for all web work.
+a dedicated Chrome profile signed in to the sites I work in. Use it for all web work, except
+where my private notes give a kind of work its own browser server (`<id>-browser`, with its
+`mcp__<id>-browser__*` tools): use that one for that work, from any folder.
 
 - Other sessions use the same browser at the same time: open your own page, work in
   it, and close it when you are done. Never close or navigate a page you did not open.

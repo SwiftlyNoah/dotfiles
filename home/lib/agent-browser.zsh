@@ -3,8 +3,9 @@
 # Each is its own Chrome, with its own profile and debugging port, so what one is signed in
 # to never reaches agents driving the other. They are listed under "browsers" in your local
 # config (home/lib/local-config.zsh): an id, the name of its launcher app, its port, and
-# optionally "folders", whose sessions use it. "defaultBrowser" (main if unset) takes every
-# other session.
+# optionally "folders", whose sessions use it, and "everySession", which gives every other
+# session it too, as a second browser server, <id>-browser (home/bin/claude-setup).
+# "defaultBrowser" (main if unset) takes every other session.
 #
 # The debugging ports listen on 127.0.0.1 only and have no authentication, so any program
 # running on this Mac could drive these profiles. That is the accepted price of a browser
