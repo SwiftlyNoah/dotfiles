@@ -198,8 +198,8 @@ ignores. Moving to a new Mac brings it along with no copying. Without one, every
 on [`local.example.json`](local.example.json), and copying that to `local/config.json` is a
 fine way to start.
 
-- **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port, and
-  the `folders` whose sessions use it; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
+- **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port, the
+  `folders` whose sessions use it, and optionally a `key` that opens it with `⌘⇧`; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
   (`chromeProfiles`), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
   file every session starts with (`claudeSettings`), your Claude account pool (`claudePool`:
   its GitHub `repo` and your member `name` in it; leave it `null` for none), the dates `mac-update` leaves
@@ -395,7 +395,7 @@ home/
   .config/git/hooks/      the hooks dispatcher (gitleaks, then the repo's own hooks)
   .config/wezterm/        WezTerm
   .config/herdr/          herdr's config and chimes (its runtime files aren't tracked)
-  .hammerspoon/           app hotkeys (⌘⇧ A Chrome, D Messages, X Xcode, C Claude, + your profiles)
+  .hammerspoon/           app hotkeys (⌘⇧ A Chrome, D Messages, X Xcode, C Claude, W WezTerm, + your profiles and browsers)
   bin/                    mac-check, mac-update, github-setup, claude-setup,
                           agent-browser-mcp, agent-browser-chrome, work-bootstrap, vpn
   lib/agent-browser.zsh   the shared browsers: ports, profiles, how Chrome starts
