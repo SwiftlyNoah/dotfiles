@@ -13,6 +13,38 @@ if [ "$(id -u)" -eq 0 ]; then
   exit 1
 fi
 
+# Without a terminal (an agent's shell, a script), sudo can't ask for Touch ID or a password,
+# so the switch would fail. Then this runs itself in a new WezTerm window, where sudo can ask,
+# and waits: its output shows here as it happens, and its exit code is this one's. The window
+# closes once the switch succeeds and stays open when it fails, to read why.
+WEZTERM=/Applications/WezTerm.app/Contents/MacOS/wezterm
+if [ ! -t 0 ] && [ -z "${REBUILD_IN_WEZTERM:-}" ] && [ -x "$WEZTERM" ]; then
+  run="$(mktemp -d -t rebuild)"
+  : >"$run/log"
+  inner="cd $(printf %q "$DIR") && { REBUILD_IN_WEZTERM=1 ./rebuild.sh 2>&1 | tee -a $(printf %q "$run/log"); code=\${PIPESTATUS[0]}; }
+echo \$code >$(printf %q "$run/exit.tmp") && mv $(printf %q "$run/exit.tmp") $(printf %q "$run/exit")
+if [ \$code -eq 0 ]; then echo; echo 'Done. This window closes in 5 seconds.'; sleep 5
+else echo; echo \"rebuild.sh failed (exit \$code). Press return to close.\"; read -r _; fi"
+  echo "rebuild.sh: no terminal here, so it runs in a new WezTerm window. Approve sudo there (Touch ID)." >&2
+  # Into the running WezTerm when there is one, or a new one.
+  if ! "$WEZTERM" cli spawn --new-window -- /bin/bash -c "$inner" >/dev/null 2>&1; then
+    nohup "$WEZTERM" start --always-new-process -- /bin/bash -c "$inner" >/dev/null 2>&1 &
+  fi
+  tail -n +1 -f "$run/log" &
+  tailer=$!
+  # Up to an hour: long enough for a first build, and for me to get to the Touch ID prompt.
+  for _ in $(seq 3600); do [ -f "$run/exit" ] && break; sleep 1; done
+  sleep 1
+  kill "$tailer" 2>/dev/null || true
+  if [ ! -f "$run/exit" ]; then
+    echo "rebuild.sh: the WezTerm window did not finish within an hour; its output is in $run/log" >&2
+    exit 1
+  fi
+  code="$(cat "$run/exit")"
+  rm -rf "$run"
+  exit "$code"
+fi
+
 # home.nix links live config (Neovim, WezTerm, herdr, Claude) through ~/.dotfiles. If that
 # path were a real directory, ln would put the link inside it, and every one of those
 # links would dangle without the build noticing.
