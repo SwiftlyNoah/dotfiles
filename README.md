@@ -205,8 +205,9 @@ fine way to start.
   file every session starts with (`claudeSettings`), your Claude account pool (`claudePool`:
   its GitHub `repo` and your member `name` in it; leave it `null` for none), the dates `mac-update` leaves
   alone (`deployDays`), folders `mac-tidy` keeps a copy of on an external disk
-  (`copies`: each a `from` folder and a `to` under `/Volumes`), and a disk for what isn't
-  expected to be used again (`archive`).
+  (`copies`: each a `from` folder and a `to` under `/Volumes`), a disk for what isn't
+  expected to be used again (`archive`), and the folders whose data must never leave this Mac,
+  where `claude-deepseek` refuses to start (`privateFolders`).
 - **`CLAUDE.md`**: notes for your agents that shouldn't be public, such as what each
   browser is signed in to. `claude-setup` imports it into `~/.claude/CLAUDE.md`.
 

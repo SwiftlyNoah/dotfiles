@@ -14,10 +14,12 @@
 # (it prompts for the key). Create the key and add credit at platform.deepseek.com.
 #
 # Everything the agent reads is sent to DeepSeek's servers in China, so it refuses to start
-# in folders whose data must stay on this Mac. Claude Code's /cost shows Anthropic's prices,
+# in folders whose data must stay on this Mac ("privateFolders" in your local config,
+# home/lib/local-config.zsh). Claude Code's /cost shows Anthropic's prices,
 # not DeepSeek's; the real spend is on platform.deepseek.com.
 emulate -L zsh
 setopt err_exit no_unset pipe_fail
+source "${0:A:h:h}/lib/local-config.zsh"
 
 model='deepseek-flash[1m]'
 if [[ ${1:-} == --pro ]]; then
@@ -27,6 +29,7 @@ fi
 
 here=${PWD:A}/
 for private in ${(f)"$(local_config '.privateFolders[]?')"}; do
+  private=$(local_path $private)
   if [[ $here == ${private:A}/* ]]; then
     print -u2 -- "claude-deepseek: not in ${private/#$HOME/~}: its data must not leave this Mac"
     exit 1

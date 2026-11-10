@@ -9,5 +9,6 @@
   "claudePool": null,
   "deployDays": [],
   "copies": [],
-  "archive": null
+  "archive": null,
+  "privateFolders": []
 }
