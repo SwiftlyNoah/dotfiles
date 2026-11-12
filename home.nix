@@ -250,6 +250,13 @@ in
       enable = true;
       autosuggestion.enable = true; # ghost text from history
       syntaxHighlighting.enable = true; # commands turn green when valid
+      # Owner-only files by default (octal 077) in every zsh: terminals, claude-pool sessions and
+      # the agents' shells, and scripts and launchd jobs that run zsh. With the old 022, other
+      # users on this Mac (the services' own users) could read what these shells made. Anything
+      # meant for another user sets its mode explicitly.
+      envExtra = ''
+        umask 077
+      '';
       initContent = ''
         bindkey '^f' autosuggest-accept
 

@@ -2,6 +2,9 @@
 # Applies this repo to the Mac. Run it after every change; bootstrap.sh runs it for the
 # very first switch too.
 set -euo pipefail
+# The shells' umask is 077 (home.nix, envExtra), and sudo keeps the stricter of it and its own
+# 022: the switch writes system files every user must read, so it runs with 022.
+umask 022
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 HOST="mac" # darwinConfigurations.<HOST> in flake.nix
