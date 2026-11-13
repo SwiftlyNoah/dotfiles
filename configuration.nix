@@ -245,6 +245,7 @@
       "cliclick" # scripted mouse and keyboard control
       "terminal-notifier" # macOS notifications from scripts (mac-check, mac-update)
       "xcodegen" # generates the claude-pool iOS app's Xcode project
+      "lima" # Linux VMs, for testing claude-pool's Linux and WSL support end to end
       "cloudflared" # Cloudflare Tunnel, for sites served from this Mac
     ]
     # These build against the full Xcode app, so a Mac without it yet leaves them out.
