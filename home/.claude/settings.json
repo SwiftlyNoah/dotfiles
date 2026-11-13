@@ -5,7 +5,17 @@
     "sessionUrl": false
   },
   "permissions": {
-    "allow": []
+    "allow": [
+      "Bash(launchctl kickstart gui/*/com.noahbrauner.*)",
+      "Bash(launchctl bootstrap gui/*)",
+      "Bash(launchctl submit -l com.noahbrauner.*)",
+      "Bash(~/coding/noah-os/bin/noah *)",
+      "Bash(/Users/noahbrauner/coding/noah-os/bin/noah *)",
+      "Edit(~/me/_system/policy.yaml)",
+      "Edit(~/me/_system/rules.md)",
+      "Edit(~/me/_system/decisions.md)",
+      "Edit(~/me/_system/schedule.yaml)"
+    ]
   },
   "model": "opus",
   "hooks": {
@@ -59,6 +69,14 @@
     "command": "sh \"$HOME/.dotfiles/home/.claude/statusline.sh\""
   },
   "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    },
+    "claude-fable-5-2": {
+      "effortLevel": "high"
+    }
+  },
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
   "theme": "dark-ansi",
@@ -68,5 +86,15 @@
   "remoteControlAtStartup": true,
   "crossSessionInbound": "accept",
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Installing, loading, starting or restarting Noah's own launchd user agents on this Mac (labels com.noahbrauner.*), including through his own CLIs such as `noah front install` in ~/coding/noah-os, and adding or changing jobs in ~/me/_system/schedule.yaml or ~/me/_system/registry.yaml. These are Noah's own local automation, which he has asked agents to set up.",
+      "Editing Noah's agent governance files ~/me/_system/policy.yaml, ~/me/_system/rules.md and ~/me/_system/decisions.md to record a decision or rule Noah made, or to add a local-only (outbound: false) policy action. Widening outbound actions (sending, paying, deleting outside this Mac) still needs Noah's explicit yes.",
+      "Stopping (kill, pkill) local development processes on this Mac that this session or its subagents started, including orphaned ones whose parent exited: node, astro, vite and npm dev or preview servers, test runners, headless Chrome used for screenshots, xcodebuild and simulator runs started by agents.",
+      "Merging, rebasing and committing to local branches (main included) of Noah's own repositories under ~/coding and ~/me, and removing git worktrees and branches that this session's agents created.",
+      "Running Noah's own command line tools on this Mac: ~/coding/noah-os/bin/noah (status, tick, refresh, lights, front, asks, check), the module scripts under ~/me/*/scripts, uv run, npm run and node scripts in his repositories, and `claude-pool current` for nested Claude runs."
+    ]
+  }
 }
