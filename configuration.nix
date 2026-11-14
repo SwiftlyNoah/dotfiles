@@ -34,6 +34,11 @@
         show-recents = false;
         largesize = 128; # magnified icon size
         magnification = false;
+        # No hot corners (1 is "no action"; macOS's default puts Quick Note bottom right).
+        wvous-tl-corner = 1;
+        wvous-tr-corner = 1;
+        wvous-bl-corner = 1;
+        wvous-br-corner = 1;
         persistent-apps = [
           "/Applications/Google Chrome.app"
         ]
@@ -66,7 +71,11 @@
         Bluetooth = false;
         FocusModes = false;
       };
-      trackpad.Clicking = true; # tap to click
+      trackpad = {
+        Clicking = true; # tap to click
+        FirstClickThreshold = 0; # a light click
+        SecondClickThreshold = 0;
+      };
       menuExtraClock.ShowSeconds = true;
       screencapture.location = "/Users/${user}/Downloads";
 
@@ -93,7 +102,22 @@
         # The alert sound: "Lilac", herdr's agent-needs-me chime (home/.config/herdr/sounds).
         NSGlobalDomain = {
           "com.apple.sound.beep.sound" = "/Users/${user}/Library/Sounds/Lilac.aiff";
+          AppleKeyboardUIMode = 2; # Tab moves between every control, not only text fields
+          AppleActionOnDoubleClick = "Minimize"; # double-clicking a title bar
+          AppleEnableSwipeNavigateWithScrolls = false; # no back and forward by two-finger swipe
+          "com.apple.trackpad.forceClick" = false;
+          "com.apple.trackpad.scaling" = 0.6875; # tracking speed
         };
+        # Stage Manager off, no margins around tiled windows, and the desktop's items hidden.
+        "com.apple.WindowManager" = {
+          GloballyEnabled = false;
+          EnableTiledWindowMargins = false;
+          HideDesktop = true;
+          AppWindowGroupingBehavior = true;
+          StandardHideWidgets = false;
+          StageManagerHideWidgets = false;
+        };
+        "com.apple.dock".showAppExposeGestureEnabled = true;
         # Maccy's history on ⌃⌘V (key code 9, ⌃⌘ = 4096 + 256). Its default, ⌘⇧C, is
         # Hammerspoon's Claude key, and macOS keeps ⌘⇧Space for the Screenshot app's visual
         # intelligence. It still skips copies that apps mark as passwords.
@@ -122,6 +146,17 @@
           menubarIconShown = "false";
           # The window under the pointer is the one ⌘Tab switches to on release.
           mouseHoverEnabled = "true";
+        };
+        # Hammerspoon runs with no Dock or menu bar icon (its Time Machine item is its own).
+        "org.hammerspoon.Hammerspoon" = {
+          MJShowDockIconKey = false;
+          MJShowMenuIconKey = false;
+        };
+        # OverSight alerts on camera and microphone use without a menu bar icon, and ignores
+        # devices that turn off.
+        "com.objective-see.oversight" = {
+          noIconMode = true;
+          disableInactive = true;
         };
       };
     };
