@@ -312,6 +312,9 @@
       "logi-options+" # the Logitech mouse's buttons and scrolling
       "sf-symbols" # Apple's symbol browser, for app icons and UI
       "android-studio" # Android builds of the apps
+      "postman" # HTTP API requests
+      "markedit" # a plain Markdown editor
+      "keychron-assistant" # the Keychron Q1 Ultra's keys and firmware
     ];
     # No masApps: once any App Store app is listed, zap uninstalls every App Store app that
     # isn't (on a Studio it took GarageBand, iMovie, Keynote, Numbers and Pages). Install these
