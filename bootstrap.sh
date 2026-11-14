@@ -142,7 +142,7 @@ fi
 todo=()
 gh auth status >/dev/null 2>&1 || todo+=("Sign in to GitHub: home/bin/github-setup, then home/bin/claude-setup")
 [ -d /Applications/Xcode.app ] || ls -d /Applications/Xcode-*.app >/dev/null 2>&1 ||
-  todo+=("Install Xcode with the Xcodes app (Apple ID), then ./rebuild.sh to add idb-companion")
+  todo+=("Install Xcode with the Xcodes app (Apple ID), then ./rebuild.sh to add idb-companion and home/bin/claude-setup to build the pool's menu bar app (it needs the full Xcode)")
 fdesetup status | grep -q "FileVault is On" ||
   todo+=("Turn on FileVault (System Settings > Privacy & Security), and save the recovery key in 1Password")
 sysadminctl -screenLock status 2>&1 | grep -q immediate ||
