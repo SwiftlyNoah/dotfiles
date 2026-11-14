@@ -271,6 +271,7 @@ in
           "LuLu" # outbound firewall
           "OverSight" # camera and microphone alerts
           "ColorSlurp" # color picker (from the App Store)
+          "Amphetamine" # keep-awake menu (from the App Store)
         ]
     );
 
