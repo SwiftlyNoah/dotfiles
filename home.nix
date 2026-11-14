@@ -242,7 +242,37 @@ in
           StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/noahs-mac.log";
         };
       };
-    };
+    }
+    # The menu bar and helper apps, opened in the background at every login, so a new Mac
+    # starts them without anyone adding Login Items by hand. `open` leaves one already
+    # running alone. Each still asks once for its own permissions (Accessibility, Screen
+    # Recording, a network or system extension).
+    // lib.listToAttrs (
+      map
+        (app: {
+          name = "login-${lib.toLower (lib.replaceStrings [ " " ] [ "-" ] app)}";
+          value = {
+            enable = true;
+            config = {
+              ProgramArguments = [
+                "/usr/bin/open"
+                "-g"
+                "-a"
+                app
+              ];
+              RunAtLoad = true;
+            };
+          };
+        })
+        [
+          "Hammerspoon" # window and key automation, the Time Machine progress item
+          "Maccy" # clipboard history
+          "AltTab" # Windows-style window switching
+          "LuLu" # outbound firewall
+          "OverSight" # camera and microphone alerts
+          "ColorSlurp" # color picker (from the App Store)
+        ]
+    );
 
   fonts.fontconfig.enable = true;
   # The home-configuration.nix(5) man page. Building it warns on every rebuild (an
