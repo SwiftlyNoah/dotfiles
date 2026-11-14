@@ -271,6 +271,16 @@
       "blockblock"
       "oversight"
       "tailscale-app" # private network, so the claude-pool iOS app reaches this Mac's sessions over SSH
+      "claude" # Claude desktop
+      "slack"
+      "zoom"
+      "logi-options+" # the Logitech mouse's buttons and scrolling
+      "sf-symbols" # Apple's symbol browser, for app icons and UI
+      "android-studio" # Android builds of the apps
     ];
+    # No masApps: once any App Store app is listed, zap uninstalls every App Store app that
+    # isn't (on a Studio it took GarageBand, iMovie, Keynote, Numbers and Pages). Install these
+    # from the App Store by hand instead: ColorSlurp (1287239339), Transporter (1450874784),
+    # Amphetamine on a laptop (937984704).
   };
 }

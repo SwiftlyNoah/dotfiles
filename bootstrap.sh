@@ -151,7 +151,7 @@ tmutil destinationinfo 2>/dev/null | grep -q "^Name" ||
   todo+=("Add your Time Machine drives (Encrypt backups on), and keep the passwords in 1Password")
 profiles list 2>/dev/null | grep -q "profileIdentifier: local.dotfiles.chrome-extensions$" ||
   todo+=("Approve the Chrome extensions profile (1Password everywhere, no Claude in Chrome): open home/chrome/extensions.mobileconfig, then System Settings > General > Device Management")
-todo+=("Install the App Store apps by hand: Amphetamine, ColorSlurp")
+todo+=("Install the App Store apps by hand: ColorSlurp, Transporter, and Amphetamine on a laptop (configuration.nix lists their IDs)")
 [ -n "$(jq -r '.workRepos[]?' "$DIR/local/config.json" 2>/dev/null)" ] &&
   todo+=("Set up your work repos: work-bootstrap")
 
