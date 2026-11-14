@@ -59,7 +59,10 @@ exec ${(q)MODE} $instance show" >"$bundle/Contents/MacOS/launcher"
     iconutil -c icns "$iconset" -o "$bundle/Contents/Resources/icon.icns"
   fi
   print -r -- "$stamp" >"$bundle/Contents/Resources/stamp"
-  codesign --force --sign - "$bundle" 2>/dev/null
+  # codesign refuses a bundle with extended attributes ("resource fork, Finder information, or
+  # similar detritus"), and a freshly installed Chrome's icon carries Finder info and quarantine.
+  xattr -cr "$bundle"
+  codesign --force --sign - "$bundle"
 
   mkdir -p "$HOME/Applications"
   rm -rf "$app"
