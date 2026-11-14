@@ -143,6 +143,9 @@ in
   # (configuration.nix can't write it: nix-darwin splits the path at its space.)
   home.activation.menuBarOrder = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     menubar="${config.home.homeDirectory}/Library/Group Containers/com.apple.MenuBar/Library/Preferences/com.apple.MenuBar"
+    # The menu bar's group container is another app's data: macOS lets a switch write it only
+    # from a terminal with Full Disk Access, which a new Mac's Terminal doesn't have yet. The order
+    # is cosmetic, so a refusal is a warning and the next switch from such a terminal applies it.
     run /usr/bin/defaults write "$menubar" TrailingItemPreferredPositions -dict-add \
       module:Clock -float 0 \
       module:BentoBox-0 -float 176.5 \
@@ -154,7 +157,8 @@ in
       status:com.if.Amphetamine::Amphetamine -float 340 \
       status:org.p0deje.Maccy::Item-0 -float 380 \
       status:com.cisco.secureclient.gui::Item-0 -float 700 \
-      status:org.hammerspoon.Hammerspoon::backup -float 800
+      status:org.hammerspoon.Hammerspoon::backup -float 800 ||
+      warnEcho "Menu bar order not set: this terminal has no Full Disk Access (System Settings, Privacy and Security). Run ./rebuild.sh again once it has."
   '';
 
   launchd.agents =
