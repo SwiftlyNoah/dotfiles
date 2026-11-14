@@ -137,8 +137,9 @@ in
   '';
 
   # The menu bar, left to right: a Time Machine backup's progress while one runs (Hammerspoon),
-  # Cisco Secure Client (the VPN), Maccy, Amphetamine, Noah's Mac, Noah's
-  # Pool, Now Playing, Wi-Fi, Battery, Control Center, Clock. macOS 27 keeps the order here,
+  # Cisco Secure Client (the VPN), Maccy, Amphetamine, 1Password, Noah's Mac, Tailscale,
+  # ColorSlurp, Noah's Pool, Now Playing, Wi-Fi, Battery, Control Center, Clock, and no
+  # Spotlight (Search) icon. macOS 27 keeps the order here,
   # as each item's distance from the right edge, and rewrites it when an icon is ⌘-dragged.
   # (configuration.nix can't write it: nix-darwin splits the path at its space.)
   home.activation.menuBarOrder = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -153,12 +154,22 @@ in
       module:WiFi -float 225 \
       module:NowPlaying -float 250 \
       status:NoahsPool::Item-0 -float 300 \
+      status:com.IdeaPunch.ColorSlurp::Item-0 -float 301.5 \
+      status:io.tailscale.ipn.macsys::Item-0 -float 318 \
       status:NoahsMac::Item-0 -float 320 \
       status:com.if.Amphetamine::Amphetamine -float 340 \
       status:org.p0deje.Maccy::Item-0 -float 380 \
       status:com.cisco.secureclient.gui::Item-0 -float 700 \
       status:org.hammerspoon.Hammerspoon::backup -float 800 ||
       warnEcho "Menu bar order not set: this terminal has no Full Disk Access (System Settings, Privacy and Security). Run ./rebuild.sh again once it has."
+    # 1Password names its item with a per-install ID, so place whichever one this Mac has.
+    op_item=$(/usr/bin/defaults read "$menubar" TrailingItemPreferredPositions 2>/dev/null |
+      /usr/bin/sed -n 's/^ *"\(status:com\.1password\.1password::[^"]*\)".*/\1/p' | /usr/bin/head -n 1)
+    if [ -n "$op_item" ]; then
+      run /usr/bin/defaults write "$menubar" TrailingItemPreferredPositions -dict-add "$op_item" -float 333.5 || true
+    fi
+    # No Spotlight icon in the menu bar (⌘Space still opens it).
+    run /usr/bin/defaults -currentHost write com.apple.Spotlight MenuItemHidden -int 1
   '';
 
   launchd.agents =
