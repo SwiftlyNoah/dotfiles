@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Chrome's extensions, for every Chrome profile of this user on this Mac (your own and the
+  agent browsers): 1Password is always installed, and Claude in Chrome never is (blocking
+  it also removes it where it was installed). Chrome takes extension rules only from a
+  configuration profile, and macOS installs one only after you approve it: open this file,
+  then System Settings, General, Device Management, the profile, Install. bootstrap.sh and
+  mac-check say when it isn't installed; chrome://policy shows what Chrome read.
+-->
+<plist version="1.0">
+<dict>
+  <key>PayloadType</key><string>Configuration</string>
+  <key>PayloadVersion</key><integer>1</integer>
+  <key>PayloadScope</key><string>User</string>
+  <key>PayloadIdentifier</key><string>local.dotfiles.chrome-extensions</string>
+  <key>PayloadUUID</key><string>35A3272B-0BD0-4CDC-90F8-FA6CC63A47FE</string>
+  <key>PayloadDisplayName</key><string>Chrome extensions</string>
+  <key>PayloadDescription</key><string>Every Chrome profile has 1Password, and none has Claude in Chrome.</string>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key><string>com.google.Chrome</string>
+      <key>PayloadVersion</key><integer>1</integer>
+      <key>PayloadIdentifier</key><string>local.dotfiles.chrome-extensions.chrome</string>
+      <key>PayloadUUID</key><string>A140C6D6-C723-49FB-BBA6-289A113F25FF</string>
+      <key>PayloadDisplayName</key><string>Chrome extensions</string>
+      <key>ExtensionSettings</key>
+      <dict>
+        <!-- 1Password -->
+        <key>aeblfdkhhhdcdjpifhhbdiojplfjncoa</key>
+        <dict>
+          <key>installation_mode</key><string>force_installed</string>
+          <key>update_url</key><string>https://clients2.google.com/service/update2/crx</string>
+        </dict>
+        <!-- Claude in Chrome -->
+        <key>fcoeoabgfenejglbffodgkkbkcdhcgfn</key>
+        <dict>
+          <key>installation_mode</key><string>blocked</string>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

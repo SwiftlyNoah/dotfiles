@@ -87,6 +87,11 @@ signing_ok=0
 check "Commit signing" $signing_ok \
   "commit.gpgsign=${signing:-unset}, key $([[ -f $HOME/.ssh/id_ed25519.pub ]] && echo present || echo missing)"
 
+# Chrome extensions: 1Password in every profile, Claude in Chrome in none (home/chrome)
+chrome_ok=$(profiles list 2>/dev/null | grep -q "profileIdentifier: local.dotfiles.chrome-extensions$" && echo 1 || echo 0)
+check "Chrome extensions" $chrome_ok \
+  "$( (( chrome_ok )) && echo "profile installed" || echo "profile not installed (open ~/.dotfiles/home/chrome/extensions.mobileconfig, then System Settings > General > Device Management)")"
+
 print -l -- $lines
 total=${#lines}
 passed=$(( total - ${#failed} ))
