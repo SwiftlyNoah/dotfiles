@@ -288,6 +288,40 @@ LogoutWatcher = hs.caffeinate.watcher.new(function(event)
   end
 end):start()
 
+-- A login ends at a clean desktop. macOS 27 relaunches apps on its own at login, from its
+-- persistent apps list (~/Library/Group Containers/group.com.apple.loginwindow.persistent-apps,
+-- kept by loginwindow whatever "Reopen windows" says), and those show their windows:
+-- ColorSlurp's, and my Chrome with an empty New Tab. So for the first minute of a session,
+-- the menu bar helpers' windows close (the apps keep running) and a Chrome of mine that macOS
+-- just started with nothing but new tabs quits. Anything I open in that minute is left alone.
+local QUIET_AT_LOGIN = {
+  "com.IdeaPunch.ColorSlurp", "com.ideapunch.colorslurp", "com.objective-see.lulu.app", "com.objective-see.oversight",
+}
+local sessionPid = hs.execute("/usr/bin/pgrep -n -x -u $(/usr/bin/id -u) loginwindow"):match("%d+")
+if sessionPid and runningFor(sessionPid) < 120 then
+  local quietUntil = os.time() + 60
+  LoginQuiet = hs.timer.doEvery(1, function()
+    if os.time() > quietUntil then
+      LoginQuiet:stop()
+      return
+    end
+    for _, id in ipairs(QUIET_AT_LOGIN) do
+      for _, app in ipairs(hs.application.applicationsForBundleID(id)) do
+        for _, window in ipairs(app:visibleWindows()) do window:close() end
+      end
+    end
+    local mine = personalChrome()
+    if mine and runningFor(mine:pid()) < 120 then
+      local windows = mine:allWindows()
+      local onlyNewTabs = #windows > 0
+      for _, window in ipairs(windows) do
+        if not (window:title() or ""):match("^New Tab") then onlyNewTabs = false end
+      end
+      if onlyNewTabs then mine:kill() end
+    end
+  end)
+end
+
 -- A shared browser's "key" in the local config opens it with ⌥ and that key, the way its
 -- launcher does (agent-browser-mode, which also waits for a Chrome that is restarting).
 -- Pressed again while it is in front, it steps through its windows like the app hotkeys.
