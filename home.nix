@@ -215,9 +215,11 @@ in
     in
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run /usr/bin/defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict-add \
-        ${lib.concatStringsSep " \\\n    " (lib.mapAttrsToList entry shortcuts)}
+        ${lib.concatStringsSep " \\\n    " (lib.mapAttrsToList entry shortcuts)} ||
+        warnEcho "Keyboard shortcuts not saved (defaults write failed)."
       # Apply them now, not at the next login.
-      run /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u
+      run /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u ||
+        warnEcho "Keyboard shortcuts saved but not applied (activateSettings failed); they apply at the next login."
     '';
 
   # The app each file type opens in, where macOS would pick Xcode, as on the MacBook: Markdown
