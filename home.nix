@@ -172,6 +172,21 @@ in
     run /usr/bin/defaults -currentHost write com.apple.Spotlight MenuItemHidden -int 1
   '';
 
+  # LuLu, OverSight and ColorSlurp each show a window when started any way but as a login item
+  # (they check how macOS launched them), so they are real Login Items, hidden, as on the
+  # MacBook, rather than launchd jobs. Writing them takes System Events: the first rebuild
+  # from a terminal asks once for Automation permission.
+  home.activation.loginItems = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    for app in LuLu OverSight ColorSlurp; do
+      [ -d "/Applications/$app.app" ] || continue
+      run /usr/bin/osascript \
+        -e "tell application \"System Events\"" \
+        -e "if not (exists login item \"$app\") then make login item at end with properties {path:\"/Applications/$app.app\", hidden:true}" \
+        -e "end tell" >/dev/null ||
+        warnEcho "Login item $app not added (System Events needs Automation permission for this terminal)."
+    done
+  '';
+
   launchd.agents =
     lib.mapAttrs
       (name: job: {
@@ -281,9 +296,6 @@ in
           "Hammerspoon" # window and key automation, the Time Machine progress item
           "Maccy" # clipboard history
           "AltTab" # Windows-style window switching
-          "LuLu" # outbound firewall
-          "OverSight" # camera and microphone alerts
-          "ColorSlurp" # color picker (from the App Store)
           "Amphetamine" # keep-awake menu (from the App Store)
         ]
     );

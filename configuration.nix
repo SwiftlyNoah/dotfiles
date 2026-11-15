@@ -102,6 +102,7 @@
         # The alert sound: "Lilac", herdr's agent-needs-me chime (home/.config/herdr/sounds).
         NSGlobalDomain = {
           "com.apple.sound.beep.sound" = "/Users/${user}/Library/Sounds/Lilac.aiff";
+          NSQuitAlwaysKeepsWindows = false; # "Close windows when quitting an application"
           AppleKeyboardUIMode = 2; # Tab moves between every control, not only text fields
           AppleActionOnDoubleClick = "Minimize"; # double-clicking a title bar
           AppleEnableSwipeNavigateWithScrolls = false; # no back and forward by two-finger swipe
@@ -118,6 +119,12 @@
           StageManagerHideWidgets = false;
         };
         "com.apple.dock".showAppExposeGestureEnabled = true;
+        # A logout, restart or shutdown closes every window, and logging in opens none: no
+        # "Reopen windows when logging back in", and apps don't restore their windows either.
+        "com.apple.loginwindow" = {
+          TALLogoutSavesState = false;
+          LoginwindowLaunchesRelaunchApps = false;
+        };
         # Maccy's history on ⌃⌘V (key code 9, ⌃⌘ = 4096 + 256). Its default, ⌘⇧C, is
         # Hammerspoon's Claude key, and macOS keeps ⌘⇧Space for the Screenshot app's visual
         # intelligence. It still skips copies that apps mark as passwords.
