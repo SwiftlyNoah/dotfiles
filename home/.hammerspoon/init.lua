@@ -277,6 +277,17 @@ AgentBrowsers = {
   end,
 }
 
+-- When the session ends (logout, restart, shutdown), close the shared browsers' Chromes over
+-- their DevTools ports and keep their jobs from starting new ones: macOS's own quit request
+-- goes unanswered by a Chrome with no windows left, which stops the logout with "Google Chrome
+-- interrupted log out" (home/bin/agent-browser-logout). Detached with nohup, so it finishes
+-- even after macOS has quit Hammerspoon.
+LogoutWatcher = hs.caffeinate.watcher.new(function(event)
+  if event == hs.caffeinate.watcher.systemWillPowerOff then
+    hs.execute("nohup " .. HOME .. "/.dotfiles/home/bin/agent-browser-logout >/dev/null 2>&1 &")
+  end
+end):start()
+
 -- A shared browser's "key" in the local config opens it with ⌥ and that key, the way its
 -- launcher does (agent-browser-mode, which also waits for a Chrome that is restarting).
 -- Pressed again while it is in front, it steps through its windows like the app hotkeys.

@@ -78,7 +78,9 @@ agent_browser_pid() {
 # step has a time limit, so a Chrome that is stuck can't leave the caller stuck with it:
 # one that doesn't finish gets a SIGTERM, and one that ignores that too is killed. Returns
 # once all of its processes are gone, so the next Chrome can take the profile.
+# $1: seconds to wait for it to close before terminating it (30 by default; a logout uses less).
 agent_browser_quit() {
+  local -i patience=$(( ${1:-30} * 5 )) i
   local pid=$(agent_browser_pid)
   [[ -n $pid ]] || return 0
   # This Chrome's processes, taken now: once they are gone, home/bin/agent-browser-chrome
@@ -91,7 +93,7 @@ agent_browser_quit() {
     const ws = new WebSocket(v.webSocketDebuggerUrl);
     ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: "Browser.close" }));
     ws.onmessage = ws.onclose = () => process.exit(0);' $PORT 2>/dev/null || true
-  for _ in {1..150}; do kill -0 $pid 2>/dev/null || break; sleep 0.2; done
+  for (( i = 0; i < patience; i++ )); do kill -0 $pid 2>/dev/null || break; sleep 0.2; done
   if kill -0 $pid 2>/dev/null; then
     print -u2 -- "agent-browser: Chrome $pid did not quit; terminating it"
     kill -TERM $pid 2>/dev/null
@@ -167,6 +169,18 @@ agent_browser_app() {
   /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -q -t 5 -c "AgentBrowsers.$1('$ID')" >/dev/null && return 0
   print -u2 -- "agent-browser: can't $1 the $ID browser: Hammerspoon isn't answering"
   return 1
+}
+
+# A session that is ending (logout, restart, shutdown): home/bin/agent-browser-logout marks it,
+# and agent_browser_logout_pending holds for three minutes after, long enough for any logout,
+# short enough that one cancelled after all doesn't keep the browsers down.
+readonly AGENT_BROWSER_LOGOUT_MARK="$HOME/.local/state/agent-browser/logging-out"
+agent_browser_logout_mark() {
+  mkdir -p "${AGENT_BROWSER_LOGOUT_MARK:h}"
+  : >"$AGENT_BROWSER_LOGOUT_MARK"
+}
+agent_browser_logout_pending() {
+  [[ -n $(/usr/bin/find "$AGENT_BROWSER_LOGOUT_MARK" -mmin -3 2>/dev/null) ]]
 }
 
 # Whether this instance's Chrome is running. The trailing space or end keeps "agent-browser"

@@ -254,8 +254,9 @@ in
         };
       };
     }
-    # The menu bar and helper apps, opened in the background at every login, so a new Mac
-    # starts them without anyone adding Login Items by hand. `open` leaves one already
+    # The menu bar and helper apps, opened hidden in the background at every login, so a new Mac
+    # starts them without anyone adding Login Items by hand, and no settings or About window
+    # appears. `open` leaves one already
     # running alone. Each still asks once for its own permissions (Accessibility, Screen
     # Recording, a network or system extension).
     // lib.listToAttrs (
@@ -267,7 +268,8 @@ in
             config = {
               ProgramArguments = [
                 "/usr/bin/open"
-                "-g"
+                "-g" # in the background
+                "-j" # hidden: no window at login, only the menu bar item
                 "-a"
                 app
               ];

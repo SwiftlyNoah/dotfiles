@@ -38,6 +38,15 @@ after_exit() {
 waited=$SECONDS
 while agent_browser_running; do sleep 0.5; done
 (( SECONDS - waited > 3 )) && after_exit
+# No Chrome while the session ends (home/bin/agent-browser-logout marks it): launchd starts this
+# job again after stopping it, and a new Chrome then would stop the logout. A logout that is
+# cancelled lets the mark expire, and the next Chrome starts then.
+trap 'exit 0' TERM HUP INT
+while agent_browser_logout_pending; do
+  sleep 2 &
+  wait $!
+done
+trap - TERM HUP INT
 agent_browser_prepare
 agent_browser_args
 started=$SECONDS

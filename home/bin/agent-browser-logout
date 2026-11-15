@@ -1,0 +1,22 @@
+#!/bin/zsh
+# Closes every shared browser's Chrome for a logout, restart or shutdown, and keeps their
+# launchd jobs (home/bin/agent-browser-chrome) from starting new ones while it goes on.
+# Hammerspoon runs this as soon as macOS says the session is ending (AgentBrowsers in
+# home/.hammerspoon/init.lua).
+#
+# Why: macOS asks each app to quit, and a Chrome with no windows left (agents close their
+# tabs) ignores that request, so the logout stops with "Google Chrome interrupted log out".
+# Closing each one over its DevTools port works with or without windows, and one that hangs
+# is terminated after 3 seconds, well inside the time macOS gives a logout.
+#
+# The mark it leaves counts for a few minutes (agent_browser_logout_pending), so a logout
+# that is cancelled after all leaves the browsers to start again on their own.
+emulate -L zsh
+setopt no_unset
+source "${0:A:h:h}/lib/agent-browser.zsh"
+
+agent_browser_logout_mark
+for instance in ${(f)"$(agent_browser_ids)"}; do
+  (agent_browser_instance $instance && agent_browser_quit 3) &
+done
+wait
