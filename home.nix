@@ -244,6 +244,16 @@ in
         }' >/dev/null || warnEcho "Default apps not set."
     '';
 
+  # Finder's sidebar Favorites, in order, from `sidebarFolders` in your own settings (none: left
+  # as it is). home/lib/finder-sidebar.swift skips folders that don't exist yet.
+  home.activation.finderSidebar = lib.mkIf ((localConfig.sidebarFolders or [ ]) != [ ]) (
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run /usr/bin/xcrun swift ${config.home.homeDirectory}/.dotfiles/home/lib/finder-sidebar.swift \
+        ${lib.escapeShellArgs localConfig.sidebarFolders} 2>/dev/null ||
+        warnEcho "Finder sidebar not set (home/lib/finder-sidebar.swift failed)."
+    ''
+  );
+
   # LuLu, OverSight and ColorSlurp each show a window when started any way but as a login item
   # (they check how macOS launched them), so they are real Login Items, hidden, as on the
   # MacBook, rather than launchd jobs. Writing them takes System Events: the first rebuild

@@ -207,7 +207,8 @@ fine way to start.
   alone (`deployDays`), folders `mac-tidy` keeps a copy of on an external disk
   (`copies`: each a `from` folder and a `to` under `/Volumes`), a disk for what isn't
   expected to be used again (`archive`), and the folders whose data must never leave this Mac,
-  where `claude-deepseek` refuses to start (`privateFolders`).
+  where `claude-deepseek` refuses to start (`privateFolders`), and the folders Finder's sidebar
+  lists under Favorites, in order (`sidebarFolders`, a leading `~` for home; empty leaves the sidebar alone).
 - **`CLAUDE.md`**: notes for your agents that shouldn't be public, such as what each
   browser is signed in to. `claude-setup` imports it into `~/.claude/CLAUDE.md`.
 
