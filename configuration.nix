@@ -328,7 +328,6 @@
       "logi-options+" # the Logitech mouse's buttons and scrolling
       "sf-symbols" # Apple's symbol browser, for app icons and UI
       "android-studio" # Android builds of the apps
-      "postman" # HTTP API requests
       "markedit" # a plain Markdown editor
       "keychron-assistant" # the Keychron Q1 Ultra's keys and firmware
     ];
