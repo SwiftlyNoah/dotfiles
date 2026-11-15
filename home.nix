@@ -220,6 +220,30 @@ in
       run /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u
     '';
 
+  # The app each file type opens in, where macOS would pick Xcode, as on the MacBook: Markdown
+  # in MarkEdit and Python in VS Code. Set only when it differs and the app is installed.
+  home.activation.defaultApps =
+    let
+      apps = {
+        "net.daringfireball.markdown" = "app.cyan.markedit";
+        "public.python-script" = "com.microsoft.VSCode";
+      };
+    in
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run /usr/bin/osascript -l JavaScript -e '
+        ObjC.import("AppKit");
+        ObjC.import("CoreServices");
+        const apps = ${builtins.toJSON apps};
+        for (const type in apps) {
+          const app = apps[type];
+          const ref = $.LSCopyDefaultRoleHandlerForContentType($(type), $.kLSRolesAll);
+          const now = ref ? ObjC.unwrap(ObjC.castRefToObject(ref)) : "";
+          const installed = !$.NSWorkspace.sharedWorkspace.URLForApplicationWithBundleIdentifier(app).isNil();
+          if (installed && now.toLowerCase() !== app.toLowerCase())
+            $.LSSetDefaultRoleHandlerForContentType($(type), $.kLSRolesAll, $(app));
+        }' >/dev/null || warnEcho "Default apps not set."
+    '';
+
   # LuLu, OverSight and ColorSlurp each show a window when started any way but as a login item
   # (they check how macOS launched them), so they are real Login Items, hidden, as on the
   # MacBook, rather than launchd jobs. Writing them takes System Events: the first rebuild
