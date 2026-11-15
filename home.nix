@@ -172,6 +172,54 @@ in
     run /usr/bin/defaults -currentHost write com.apple.Spotlight MenuItemHidden -int 1
   '';
 
+  # Keyboard shortcuts that differ from macOS's own (System Settings, Keyboard, Keyboard
+  # Shortcuts), as on the MacBook: ⌃1 and ⌃2 switch to Desktop 1 and 2, and these are off:
+  # the ⌃F1 to ⌃F8 keyboard navigation keys, ⌘` (next window), ⌥⌘' (window drawer), ⌘F5
+  # (VoiceOver), ⌥⌘F5 (accessibility controls), ⌃Space and ⌃⌥Space (input sources) and
+  # Do Not Disturb's. Each is (character, key code, modifier flags), merged into the rest.
+  home.activation.keyboardShortcuts =
+    let
+      off = parameters: {
+        enabled = false;
+        inherit parameters;
+      };
+      on = parameters: {
+        enabled = true;
+        inherit parameters;
+      };
+      shortcuts = {
+        "7" = off [ 65535 120 8650752 ]; # ⌃F2 focus the menu bar
+        "8" = off [ 65535 99 8650752 ]; # ⌃F3 focus the Dock
+        "9" = off [ 65535 118 8650752 ]; # ⌃F4 focus the active or next window
+        "10" = off [ 65535 96 8650752 ]; # ⌃F5 focus the window toolbar
+        "11" = off [ 65535 97 8650752 ]; # ⌃F6 focus a floating window
+        "12" = off [ 65535 122 8650752 ]; # ⌃F1 turn keyboard access on or off
+        "13" = off [ 65535 98 8650752 ]; # ⌃F7 change the way Tab moves focus
+        "27" = off [ 96 50 1048576 ]; # ⌘` focus the next window
+        "51" = off [ 39 50 1572864 ]; # ⌥⌘' focus the window drawer
+        "57" = off [ 65535 100 8650752 ]; # ⌃F8 focus the status menus
+        "59" = off [ 65535 96 9437184 ]; # ⌘F5 VoiceOver
+        "60" = off [ 32 49 262144 ]; # ⌃Space previous input source
+        "61" = off [ 32 49 786432 ]; # ⌃⌥Space next input source
+        "118" = on [ 65535 18 262144 ]; # ⌃1 Desktop 1
+        "119" = on [ 65535 19 262144 ]; # ⌃2 Desktop 2
+        "162" = off [ 65535 96 9961472 ]; # ⌥⌘F5 accessibility controls
+        "164" = off [ 65535 65535 0 ]; # Do Not Disturb
+      };
+      entry =
+        id: s:
+        "${id} '<dict><key>enabled</key><${lib.boolToString s.enabled}/><key>value</key><dict>"
+        + "<key>parameters</key><array>${
+          lib.concatMapStrings (p: "<integer>${toString p}</integer>") s.parameters
+        }</array><key>type</key><string>standard</string></dict></dict>'";
+    in
+    lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      run /usr/bin/defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict-add \
+        ${lib.concatStringsSep " \\\n    " (lib.mapAttrsToList entry shortcuts)}
+      # Apply them now, not at the next login.
+      run /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u
+    '';
+
   # LuLu, OverSight and ColorSlurp each show a window when started any way but as a login item
   # (they check how macOS launched them), so they are real Login Items, hidden, as on the
   # MacBook, rather than launchd jobs. Writing them takes System Events: the first rebuild
