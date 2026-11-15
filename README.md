@@ -201,7 +201,7 @@ fine way to start.
 - **`config.json`**: your shared browsers (`browsers`: each one's launcher name, port,
   the `folders` whose sessions use it, `everySession` to give every session it too, as
   `<id>-browser`, and a `key` that opens it with `⌥`; `defaultBrowser` takes every other session), a `⌘⇧` key for each of your Chrome profiles
-  (`chromeProfiles`), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
+  (`chromeProfiles`: each a `key`, the Google account `email` it is signed in to, and the `name` `chrome-profiles` gives it), the repos `work-bootstrap` sets up (`workRepos`), a Claude settings
   file every session starts with (`claudeSettings`), your Claude account pool (`claudePool`:
   its GitHub `repo` and your member `name` in it; leave it `null` for none), the dates `mac-update` leaves
   alone (`deployDays`), folders `mac-tidy` keeps a copy of on an external disk

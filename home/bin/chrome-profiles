@@ -1,0 +1,80 @@
+#!/bin/zsh
+# Sets up your own Chrome's profiles from "chromeProfiles" in the local config: each one
+# (an "email" and a "name") is the profile signed in to that Google account, named "name",
+# so its ⌘⇧ key (home/.hammerspoon) finds it and its window titles end with that name.
+#
+#   chrome-profiles           names each profile, and says which still need a sign-in
+#   chrome-profiles --check   only says what is off (exit 1 when anything is)
+#
+# It also saves which folder holds each account's profile, for the keys. Chrome rewrites
+# its profile list when it quits, so naming waits until your Chrome is
+# closed. A profile that doesn't exist yet needs you: Chrome's profile menu, Add, sign in.
+emulate -L zsh
+setopt no_unset pipe_fail
+export PATH="/opt/homebrew/bin:/etc/profiles/per-user/$USER/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+source "$HOME/.dotfiles/home/lib/local-config.zsh"
+
+readonly CHROME="$HOME/Library/Application Support/Google/Chrome"
+readonly STATE="$CHROME/Local State"
+# Each account's profile folder, for the ⌘⇧ keys: Hammerspoon can't read Chrome's folder.
+readonly DIRS="$HOME/.local/state/chrome-profiles.json"
+check_only=0
+[[ ${1:-} == --check ]] && check_only=1
+
+# My Chrome, not an agent's: the agents' Chromes run with --user-data-dir.
+personal_chrome_running() {
+  ps -axo command= | grep -E '^/Applications/Google Chrome.app/Contents/MacOS/Google Chrome( |$)' |
+    grep -vq -- '--user-data-dir'
+}
+
+# Applies a jq filter (with $dir and $name) to a JSON file in place.
+edit_json() { # file, filter, dir, name
+  local tmp="$1.chrome-profiles.tmp"
+  jq --arg dir "$3" --arg name "$4" "$2" "$1" >"$tmp" && mv "$tmp" "$1"
+}
+
+if [[ ! -f $STATE ]]; then
+  echo "Chrome has no profiles yet: open Chrome once, then run chrome-profiles again."
+  exit 1
+fi
+
+mkdir -p "${DIRS:h}"
+jq '[.profile.info_cache | to_entries[] | select(.value.user_name != "")
+  | {(.value.user_name): .key}] | add // {}' "$STATE" >"$DIRS"
+
+typeset -a off rename
+while IFS=$'\t' read -r email name; do
+  dir=$(jq -r --arg email "$email" \
+    '.profile.info_cache | to_entries[] | select(.value.user_name == $email) | .key' "$STATE" | head -n1)
+  if [[ -z $dir ]]; then
+    off+=("$name: no profile signed in to $email (Chrome: profile menu > Add > sign in as $email, then run chrome-profiles again)")
+    continue
+  fi
+  current=$(jq -r --arg dir "$dir" '.profile.info_cache[$dir].name' "$STATE")
+  if [[ $current == "$name" ]]; then
+    echo "    $name: $email ($dir)"
+  else
+    off+=("$name: $email ($dir) is named \"$current\"")
+    rename+=("$dir"$'\t'"$name")
+  fi
+done < <(local_config '.chromeProfiles[]? | [.email, .name] | @tsv')
+
+if (( ${#rename} && ! check_only )); then
+  if personal_chrome_running; then
+    echo "Quit Chrome (⌘Q) so its profiles can be named, then run chrome-profiles again."
+  else
+    for entry in "${rename[@]}"; do
+      dir=${entry%%$'\t'*} name=${entry#*$'\t'}
+      edit_json "$STATE" '.profile.info_cache[$dir].name = $name
+        | .profile.info_cache[$dir].is_using_default_name = false' "$dir" "$name"
+      prefs="$CHROME/$dir/Preferences"
+      [[ -f $prefs ]] && edit_json "$prefs" '.profile.name = $name | .profile.using_default_name = false' "$dir" "$name"
+      echo "    named $dir \"$name\""
+      off=("${(@)off:#$name: *named*}")
+    done
+  fi
+fi
+
+(( ${#off} )) || exit 0
+for item in "${off[@]}"; do echo "    - $item"; done
+exit 1

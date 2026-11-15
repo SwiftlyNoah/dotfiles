@@ -4,7 +4,9 @@
 --
 -- Your own parts come from the local config (home/lib/local-config.zsh): the shared
 -- browsers (each with an optional "key", its ⌥ key), and "chromeProfiles", a ⌘⇧ key for
--- each Chrome profile of yours (one on A takes ⌘⇧A for that profile's windows only).
+-- each Chrome profile of yours (one on A takes ⌘⇧A for that profile's windows only). A
+-- profile is known by its Google account, so the key finds it whatever folder Chrome gave
+-- it on this Mac; home/bin/chrome-profiles gives each the name its window titles end with.
 
 -- First, so the `hs` command line tool (inside Hammerspoon.app) works even if a later line fails.
 require("hs.ipc")
@@ -89,12 +91,20 @@ local function loadedProfiles(app)
   return loaded, count
 end
 
--- Which windows belong to a profile ({ dir = "Profile 8", name = "School" }). Chrome names
--- the profile at the end of each window's title ("… - Google Chrome - Noah (School)") only
--- while two or more profiles are loaded; with one, every window is that profile's.
+-- The folder of the profile signed in to `email` ("Profile 8"), as home/bin/chrome-profiles
+-- last found it: macOS keeps Hammerspoon out of Chrome's own folder.
+local function profileDir(email)
+  local dirs = hs.json.read(HOME .. "/.local/state/chrome-profiles.json")
+  return dirs and dirs[email]
+end
+
+-- Which windows belong to a profile ({ email = "me@school.edu", name = "School" }). Chrome
+-- names the profile at the end of each window's title ("… - Google Chrome - Noah (School)")
+-- only while two or more profiles are loaded; with one, every window is that profile's.
 local function profileWindows(app, profile)
   local loaded, count = loadedProfiles(app)
-  if not loaded[profile.dir] then return {} end
+  local dir = profileDir(profile.email)
+  if not dir or not loaded[dir] then return {} end
   local windows = {}
   for _, w in ipairs(standardWindows(app)) do
     local title = w:title()
@@ -117,7 +127,14 @@ end
 local function chromeProfile(profile)
   local app = personalChrome()
   local windows = app and profileWindows(app, profile) or {}
-  if #windows == 0 then return openChrome("--profile-directory=" .. profile.dir) end
+  if #windows == 0 then
+    local dir = profileDir(profile.email)
+    if not dir then
+      hs.alert.show("No Chrome profile signed in to " .. profile.email .. ": run chrome-profiles")
+      return
+    end
+    return openChrome("--profile-directory=" .. dir)
+  end
   local front = hs.application.frontmostApplication()
   if front and front:pid() == app:pid() and cycle(windows, app:focusedWindow()) then return end
   -- allWindows lists front to back: the profile's window used last.
@@ -125,7 +142,10 @@ local function chromeProfile(profile)
 end
 
 -- Reachable from the `hs` tool, to check them without pressing keys.
-Hotkeys = { chrome = chrome, chromeProfile = chromeProfile, personalChrome = personalChrome, profileWindows = profileWindows }
+Hotkeys = {
+  chrome = chrome, chromeProfile = chromeProfile, personalChrome = personalChrome,
+  profileWindows = profileWindows, profileDir = profileDir,
+}
 
 local profileKeys = {}
 for _, profile in ipairs(localConfig.chromeProfiles) do
