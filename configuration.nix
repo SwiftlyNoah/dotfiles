@@ -103,6 +103,7 @@
         # The alert sound: "Lilac", herdr's agent-needs-me chime (home/.config/herdr/sounds).
         NSGlobalDomain = {
           "com.apple.sound.beep.sound" = "/Users/${user}/Library/Sounds/Lilac.aiff";
+          "com.apple.sound.beep.volume" = 0.532; # alerts at about half the output volume
           NSQuitAlwaysKeepsWindows = false; # "Close windows when quitting an application"
           AppleKeyboardUIMode = 2; # Tab moves between every control, not only text fields
           AppleActionOnDoubleClick = "Minimize"; # double-clicking a title bar
