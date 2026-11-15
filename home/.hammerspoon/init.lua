@@ -311,11 +311,12 @@ end):start()
 -- A login ends at a clean desktop. macOS 27 relaunches apps on its own at login, from its
 -- persistent apps list (~/Library/Group Containers/group.com.apple.loginwindow.persistent-apps,
 -- kept by loginwindow whatever "Reopen windows" says), and those show their windows:
--- ColorSlurp's, and my Chrome with an empty New Tab. So for the first minute of a session,
+-- ColorSlurp's, AltTab's settings, Hammerspoon's console, and my Chrome with an empty New Tab. So for the first minute of a session,
 -- the menu bar helpers' windows close (the apps keep running) and a Chrome of mine that macOS
 -- just started with nothing but new tabs quits. Anything I open in that minute is left alone.
 local QUIET_AT_LOGIN = {
   "com.IdeaPunch.ColorSlurp", "com.ideapunch.colorslurp", "com.objective-see.lulu.app", "com.objective-see.oversight",
+  "com.lwouis.alt-tab-macos",
 }
 local sessionPid = hs.execute("/usr/bin/pgrep -n -x -u $(/usr/bin/id -u) loginwindow"):match("%d+")
 if sessionPid and runningFor(sessionPid) < 120 then
@@ -325,6 +326,7 @@ if sessionPid and runningFor(sessionPid) < 120 then
       LoginQuiet:stop()
       return
     end
+    hs.closeConsole() -- shown when Hammerspoon is opened again while it runs
     for _, id in ipairs(QUIET_AT_LOGIN) do
       for _, app in ipairs(hs.application.applicationsForBundleID(id)) do
         for _, window in ipairs(app:visibleWindows()) do window:close() end

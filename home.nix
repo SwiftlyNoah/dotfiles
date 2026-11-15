@@ -365,12 +365,14 @@ in
           value = {
             enable = true;
             config = {
+              # Some of these start themselves at login too (AltTab's own launch agent,
+              # Hammerspoon's hs.autoLaunch), and opening a running app again makes it show a
+              # window (AltTab's settings, Hammerspoon's console). So after a moment this opens
+              # only an app that isn't running yet: on a new Mac it still starts them all.
               ProgramArguments = [
-                "/usr/bin/open"
-                "-g" # in the background
-                "-j" # hidden: no window at login, only the menu bar item
-                "-a"
-                app
+                "/bin/sh"
+                "-c"
+                "sleep 15; /usr/bin/pgrep -xq ${lib.escapeShellArg app} || exec /usr/bin/open -g -j -a ${lib.escapeShellArg app}"
               ];
               RunAtLoad = true;
             };
