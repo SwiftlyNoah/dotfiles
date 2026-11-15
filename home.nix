@@ -403,6 +403,11 @@ in
       # meant for another user sets its mode explicitly.
       envExtra = ''
         umask 077
+        # Homebrew's commands (herdr, gh, tailscale's CLI helpers) for every zsh, ssh commands
+        # included: login shells get them from /etc/zprofile, but `ssh studio herdr` and
+        # `herdr --remote` run none. Appended, so Nix's tools stay ahead of Homebrew's.
+        typeset -U path
+        path+=(/opt/homebrew/bin /opt/homebrew/sbin)
       '';
       initContent = ''
         bindkey '^f' autosuggest-accept
