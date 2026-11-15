@@ -15,7 +15,29 @@ setopt no_unset
 source "${0:A:h:h}/lib/agent-browser.zsh"
 agent_browser_instance "${1:-main}" || exit 1
 
+# After its Chrome exits: start the next one at once when agent_browser_restart quit it on
+# purpose, and otherwise wait first. A logout or shutdown quits Chrome first and stops this job
+# a few seconds later; a Chrome started again at once reads to macOS as an app interrupting the
+# logout ("Google Chrome interrupted log out"). So the wait ends early, with no new Chrome, when
+# launchd stops the job. A crash or an accidental quit costs the wait; a Chrome that can't stay
+# up isn't relaunched in a tight loop either.
+after_exit() {
+  if [[ -e $STATE/restart-now ]]; then
+    rm -f "$STATE/restart-now"
+    return
+  fi
+  trap 'exit 0' TERM HUP INT
+  sleep 20 &
+  wait $!
+  trap - TERM HUP INT
+}
+
+# A Chrome already on the profile (this job was just reloaded, by a rebuild say, while its
+# Chrome carried on) is waited for, and its exit treated like any other. A moment's wait is
+# only the last one's helpers going away.
+waited=$SECONDS
 while agent_browser_running; do sleep 0.5; done
+(( SECONDS - waited > 3 )) && after_exit
 agent_browser_prepare
 agent_browser_args
 started=$SECONDS
@@ -23,19 +45,6 @@ started=$SECONDS
 # waiting until it quits (-W). A rebuild that reloads this job stops only this script and
 # `open`: Chrome and the agents' tabs carry on, and the next run waits for it above.
 open -g -n -W -a "Google Chrome" --args "${reply[@]}"
-if [[ -e $STATE/restart-now ]]; then
-  # agent_browser_restart quit it on purpose: start the next one at once.
-  rm -f "$STATE/restart-now"
-else
-  # Any other exit waits before the next start. A logout or shutdown quits Chrome first and
-  # stops this job a few seconds later; a Chrome started again at once reads to macOS as an
-  # app interrupting the logout ("Google Chrome interrupted log out"). So the wait ends early,
-  # with no new Chrome, when launchd stops the job. A crash or an accidental quit costs the
-  # wait; a Chrome that can't stay up isn't relaunched in a tight loop either.
-  (( SECONDS - started < 5 )) && print -u2 -- "agent-browser: the $NAME Chrome exited right away; trying again shortly"
-  trap 'exit 0' TERM HUP INT
-  sleep 20 &
-  wait $!
-  trap - TERM HUP INT
-fi
+(( SECONDS - started < 5 )) && print -u2 -- "agent-browser: the $NAME Chrome exited right away; trying again shortly"
+after_exit
 exec "${0:A}" "${1:-main}"
