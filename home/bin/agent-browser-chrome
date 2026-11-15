@@ -23,9 +23,19 @@ started=$SECONDS
 # waiting until it quits (-W). A rebuild that reloads this job stops only this script and
 # `open`: Chrome and the agents' tabs carry on, and the next run waits for it above.
 open -g -n -W -a "Google Chrome" --args "${reply[@]}"
-# A Chrome that can't stay up isn't relaunched in a tight loop.
-if (( SECONDS - started < 5 )); then
-  print -u2 -- "agent-browser: the $NAME Chrome exited right away; trying again shortly"
-  sleep 5
+if [[ -e $STATE/restart-now ]]; then
+  # agent_browser_restart quit it on purpose: start the next one at once.
+  rm -f "$STATE/restart-now"
+else
+  # Any other exit waits before the next start. A logout or shutdown quits Chrome first and
+  # stops this job a few seconds later; a Chrome started again at once reads to macOS as an
+  # app interrupting the logout ("Google Chrome interrupted log out"). So the wait ends early,
+  # with no new Chrome, when launchd stops the job. A crash or an accidental quit costs the
+  # wait; a Chrome that can't stay up isn't relaunched in a tight loop either.
+  (( SECONDS - started < 5 )) && print -u2 -- "agent-browser: the $NAME Chrome exited right away; trying again shortly"
+  trap 'exit 0' TERM HUP INT
+  sleep 20 &
+  wait $!
+  trap - TERM HUP INT
 fi
 exec "${0:A}" "${1:-main}"

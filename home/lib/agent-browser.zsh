@@ -122,6 +122,9 @@ agent_browser_restart() {
   fi
   local snapshot=$(mktemp -t agent-browser)
   agent_browser_node "$AGENT_BROWSER_PAGES" snapshot "http://127.0.0.1:$PORT" >$snapshot 2>/dev/null || true
+  # Tells home/bin/agent-browser-chrome this quit is a restart, so it starts the next Chrome
+  # at once instead of waiting out the pause it keeps for logouts.
+  : >"$STATE/restart-now"
   agent_browser_quit
   if ! agent_browser_wait_up 30; then
     # Its launchd agent isn't the one that relaunches by itself (before a rebuild has
