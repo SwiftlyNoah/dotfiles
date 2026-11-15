@@ -65,6 +65,7 @@
         FXPreferredViewStyle = "Nlsv"; # list view by default
         CreateDesktop = false; # clean desktop
         ShowPathbar = true;
+        FXRemoveOldTrashItems = true; # empty what has been in the Trash for 30 days
       };
       # Bluetooth and Focus stay in Control Center, out of the menu bar.
       controlcenter = {
@@ -119,6 +120,13 @@
           StageManagerHideWidgets = false;
         };
         "com.apple.dock".showAppExposeGestureEnabled = true;
+        # Finder windows show the preview pane, search results are a list too, and View, Use
+        # Groups (⌃⌘0) groups by Date Added.
+        "com.apple.finder" = {
+          ShowPreviewPane = true;
+          FXPreferredSearchViewStyle = "Nlsv";
+          FXPreferredGroupBy = "Date Added";
+        };
         # A logout, restart or shutdown closes every window, and logging in opens none: no
         # "Reopen windows when logging back in", and apps don't restore their windows either.
         "com.apple.loginwindow" = {
