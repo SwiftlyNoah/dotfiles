@@ -107,6 +107,24 @@ in
     run ${config.home.homeDirectory}/.dotfiles/apps/noahs-mac/build.sh
   '';
 
+  # Personal Chrome (apps/personal-chrome) is the default browser: it hands each link to my own
+  # Chrome, never to a shared browser's (they are Chrome too, so macOS would pick any running
+  # one while mine is closed). Built when it changed; macOS asks once to confirm the switch.
+  home.activation.personalChrome = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${config.home.homeDirectory}/.dotfiles/apps/personal-chrome/build.sh
+    run /usr/bin/osascript -l JavaScript -e '
+      ObjC.import("CoreServices");
+      const app = "com.noahbrauner.personal-chrome";
+      const current = (ref) => ref ? ObjC.unwrap(ObjC.castRefToObject(ref)).toLowerCase() : "";
+      for (const scheme of ["http", "https", "mailto"])
+        if (current($.LSCopyDefaultHandlerForURLScheme($(scheme))) !== app)
+          $.LSSetDefaultHandlerForURLScheme($(scheme), $(app));
+      for (const type of ["public.html", "public.xhtml"])
+        if (current($.LSCopyDefaultRoleHandlerForContentType($(type), $.kLSRolesAll)) !== app)
+          $.LSSetDefaultRoleHandlerForContentType($(type), $.kLSRolesAll, $(app));' >/dev/null ||
+      warnEcho "Personal Chrome not set as the default browser."
+  '';
+
   # herdr's Claude hook (herdr-agent-state.sh), which shows each agent's state in its sidebar.
   # `herdr integration install claude` would also add its own settings.json entry, with this
   # Mac's home folder written out, to the tracked home/.claude/settings.json. So install it
