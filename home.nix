@@ -296,6 +296,7 @@ in
           "Hammerspoon" # window and key automation, the Time Machine progress item
           "Maccy" # clipboard history
           "AltTab" # Windows-style window switching
+          "Tailscale" # the tailnet: King and the phone reach this Mac only through it
           "Amphetamine" # keep-awake menu (from the App Store)
         ]
     );
