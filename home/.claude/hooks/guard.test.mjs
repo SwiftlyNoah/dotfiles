@@ -481,6 +481,45 @@ describe("git push", () => {
   ]);
   at("pass", ["git push --force"], FEATURE);
 
+  // git answers which branch a repo is on before the line runs, so after an earlier command
+  // that could change it (checkout, switch, a script) the branch isn't known. A loop runs
+  // its body again after its last command.
+  at(
+    "deny",
+    [
+      "git checkout main && git push --force",
+      'git switch main; git push -f origin "$(git branch --show-current)"',
+      "git checkout main; git push -f origin HEAD",
+      'git switch main && git push --force origin "$(git branch --show-current)"',
+      "./switch.sh && git push --force",
+      "$X; git push --force",
+      "git branch -m main && git push --force",
+      "git symbolic-ref HEAD refs/heads/main && git push -f origin HEAD",
+      "git -C /tmp checkout main; git push --force",
+      "(git checkout main); git push --force",
+      'echo "$(git checkout main)"; git push --force',
+      "sudo git switch main && git push --force",
+      "while true; do git push --force; git checkout main; done",
+      'for i in 1 2; do git push -f origin "$(git branch --show-current)"; git switch main; done',
+    ],
+    FEATURE,
+  );
+  at("ask", ['git checkout main && git push -u origin "$(git branch --show-current)"'], FEATURE);
+  at(
+    "pass",
+    [
+      'git status && git add -A && git commit -m "x" && git push --force',
+      'git fetch && git push --force origin "$(git branch --show-current)"',
+      "git push --force; git checkout main",
+      'git push -u origin "$(git branch --show-current)" && gh pr create --fill',
+      "git checkout main && git push --force origin feature",
+      "cd . && git push --force",
+      "git branch --list && git log --oneline -3 && git push --force",
+      "echo hi; ls; git push --force",
+    ],
+    FEATURE,
+  );
+
   // --prune deletes every remote branch with no local one, main included, and send-pack
   // pushes the way git push does.
   at("ask", [

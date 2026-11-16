@@ -300,9 +300,19 @@ function lookup(name, op, state) {
 const BRANCH_QUERIES = new Set(["branch --show-current", "rev-parse --abbrev-ref HEAD", "symbolic-ref --short HEAD"]);
 const branches = new Map(); // what each query printed, by folder and query
 
+// git answers for the repo as it is before the line runs. After a command that could have
+// switched a branch (anything but a few read-only ones), that answer is out of date, and
+// the line's branch is unknown. A loop runs its body again after its last command, so a
+// line with one is checked a second time from the start when that happened after an answer.
+function staleAfter(state) {
+  state.repo.staleAfterRead ||= state.repo.read;
+  state.repo.stale = true;
+}
+
 // What git [-C dir]... <a branch query> prints, or null when the guard can't tell.
 function branchQuery(args, state) {
-  if (state.exported.has("GIT_DIR") || state.exported.has("GIT_WORK_TREE")) return null;
+  if (state.repo.stale || state.exported.has("GIT_DIR") || state.exported.has("GIT_WORK_TREE")) return null;
+  state.repo.read = true;
   let dir = state.cwd;
   let k = 0;
   for (; args[k] === "-C" && k + 1 < args.length; k += 2)
@@ -362,10 +372,12 @@ function mktemp(args, cwd) {
 // Brace expansion comes before every other expansion, so only unquoted text written in the
 // command can make it. That text's {, "," and } (and a ~ that starts a word or follows
 // either) are marked with these, so that a value with a comma in it never splits.
-const [OPEN, COMMA, CLOSE, TILDE] = ["", "", "", ""];
+const MARKS = "{,}~";
+const [OPEN, COMMA, CLOSE, TILDE] = [...MARKS].map((_, n) => String.fromCharCode(0xe000 + n));
+const MARK = new RegExp(`[${OPEN}-${TILDE}]`, "g");
 const marked = (text, start) =>
   text.replace(start ? /(^|[{,])~/g : /([{,])~/g, `$1${TILDE}`).replaceAll("{", OPEN).replaceAll(",", COMMA).replaceAll("}", CLOSE);
-const unmarked = (s) => s.replace(new RegExp(`^${TILDE}(?=/|$)`), HOME).replace(/[-]/g, (c) => "{,}~"[c.charCodeAt(0) - 0xe000]);
+const unmarked = (s) => s.replace(new RegExp(`^${TILDE}(?=/|$)`), HOME).replace(MARK, (c) => MARKS[c.charCodeAt(0) - 0xe000]);
 
 // {a,b} and {1..3} at their marks, as bash and zsh expand them.
 function braceExpand(s) {
@@ -632,7 +644,10 @@ function runGit(dir, args) {
 
 // Which branch the repo at dir is on. Any failure refuses the call: an answer read as
 // "not main" would let a force push to main through.
-function currentBranch(dir) {
+function currentBranch(dir, state) {
+  if (state.repo.stale)
+    unknownGit(`which branch ${dir} is on after the commands before this push`, "Name the branch literally (git push --force origin <branch>), or run the push as a command of its own,");
+  state.repo.read = true;
   try {
     return runGit(dir, ["branch", "--show-current"]).trim();
   } catch (e) {
@@ -712,7 +727,7 @@ function checkGitPush(git, env) {
   if (!targets.length || targets.some((t) => t === "HEAD" || t === "@")) {
     const dir = gitFolder(git.options, state, env);
     if (dir === null) unknownPush("which repo this force push runs in");
-    targets.push(currentBranch(dir));
+    targets.push(currentBranch(dir, state));
   }
   // git finds a short name like heads/main under refs/ on the remote.
   const protectedBranch = targets.find((t) => /(^|\/)(main|master)$/.test(t) || t.includes("*"));
@@ -735,11 +750,28 @@ function checkGhApi(strings) {
   if (strings.includes("graphql") && strings.some((s) => /\b(deleteRef|updateRefs?)\b/.test(s))) decide("ask", "changing or deleting a branch through the GitHub API");
 }
 
+// git commands that never switch the branch a repo is on. git branch only lists, and git
+// symbolic-ref only reads, when given no branch to work on.
+const READ_ONLY_GIT = new Set(
+  "status log diff show add commit fetch push send-pack config rev-parse ls-files ls-remote grep blame describe shortlog cat-file ls-tree for-each-ref show-ref merge-base rev-list".split(" "),
+);
+const READ_ONLY = new Set(["echo", "printf", "true", "false", ":", "test", "[", "[[", "ls", "cat", "pwd", "sleep", "date", "which", "type", "grep", "head", "tail", "wc", "sort", "uniq", "jq"]);
+
+function readOnlyGit(git) {
+  if (git.unread || git.command === null) return false;
+  const args = git.words.slice(git.at + 1).map((w) => single(w, git.state));
+  if (git.command === "branch") return args.every((a) => a.startsWith("-") && !/^(-[a-zA-Z]*[mMcC]|--(move|copy))/.test(a));
+  if (git.command === "symbolic-ref") return args.filter((a) => !a.startsWith("-")).length <= 1;
+  return READ_ONLY_GIT.has(git.command);
+}
+
+// Returns whether the command was a git command that leaves the branch alone.
 function checkGit(words, strings, state, env) {
-  if (basename(strings[0]) !== "git") return;
+  if (basename(strings[0]) !== "git") return false;
   const git = gitCommand(words, state, env);
   // A word the guard can't read before the command could be the push itself.
   if (git.command === "push" || git.command === "send-pack" || git.unread) checkGitPush(git, env);
+  return readOnlyGit(git);
 }
 
 function checkSimple(cmd, state) {
@@ -752,12 +784,14 @@ function checkSimple(cmd, state) {
   while (words.length && RESERVED.has(literal(words[0]))) {
     const reserved = literal(words[0]);
     words = words.slice(1);
+    if (reserved === "while" || reserved === "until") state.repo.loop = true;
     // The time keyword takes its own -p, and a -- after it, before the command it times.
     if (reserved === "time") while (words.length && ["-p", "--"].includes(literal(words[0]))) words = words.slice(1);
   }
   if (!words.length) return;
   const keyword = literal(words[0]);
   if (keyword === "for" || keyword === "select") {
+    state.repo.loop = true;
     const name = literal(words[1]);
     if (!name) return;
     try {
@@ -870,6 +904,7 @@ function checkUnread(cmd, words, state, child) {
   const push = words.findIndex((w, k) => k > 0 && one(w, state) === "push");
   if (push !== -1 && one(first, state) === null)
     checkGitPush({ words, state, options: [{ name: "-C", value: null }], command: "push", at: push, unread: null }, child);
+  staleAfter(state);
 }
 
 // The command string a shell's -c runs: its first operand after every option (-o and -O
@@ -936,7 +971,8 @@ function checkCommand(cmd, words, state, child) {
   }
 
   if (name === "rm") checkRm(words, state);
-  checkGit(words, strings, state, child);
+  // Whether the branch is still the one git reports, once this has run.
+  let readOnly = checkGit(words, strings, state, child) || READ_ONLY.has(name);
   const [, sub, sub2] = strings;
   if (name === "gh" && sub === "repo" && sub2 === "delete") decide("ask", "deleting a GitHub repo");
   if (name === "gh" && sub === "api") checkGhApi(strings);
@@ -952,8 +988,14 @@ function checkCommand(cmd, words, state, child) {
     if (c === null) decide("deny", `can't find the command ${name} -c runs, so the guard can't check it. Write it as ${name} -c '<command>' and run it again.`);
     if (c !== undefined) checkLine(c, inherited);
     else for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
+    // What runs there was checked, and marked the branch unknown if it could change it.
+    readOnly = c !== undefined || cmd.heredocs.length > 0;
   }
-  if (name === "eval") checkLine(strings.slice(1).join(" "), copy(state));
+  if (name === "eval") {
+    checkLine(strings.slice(1).join(" "), copy(state));
+    readOnly = true;
+  }
+  if (!readOnly) staleAfter(state);
 }
 
 function checkLine(line, state) {
@@ -998,7 +1040,10 @@ function hardRefusals(command) {
 function checkBash(command, cwd) {
   if (POOL_KEY.test(command)) decide("deny", "the claude-pool key is never read or copied");
   hardRefusals(command);
-  checkLine(command, { vars: new Map(), exported: new Set(), cwd, depth: 0 });
+  const start = (stale) => ({ vars: new Map(), exported: new Set(), cwd, depth: 0, repo: { stale, read: false, staleAfterRead: false, loop: false } });
+  const first = start(false);
+  checkLine(command, first);
+  if (first.repo.loop && first.repo.staleAfterRead) checkLine(command, start(true));
 }
 
 // The hook's payload in, a Verdict (or null to stay out of it) back. Throws on a payload
