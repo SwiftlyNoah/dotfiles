@@ -148,6 +148,19 @@ cases("deny", [
 ]);
 cases("pass", ["nice -n 5 rm -rf /tmp/x", "sudo -u root ls -la", "env -u X npm test", "time make", "nice -n 5 git push --force origin feature"]);
 
+// The time keyword, with a NAME=value prefix, -p or -- after it, never hides the command it times.
+cases("ask", [
+  "time -p git push -f origin main",
+  "time -- git push -f origin main",
+  "time -p X=1 git push -f origin main",
+  "time X=1 git push -f origin main",
+  "if time -p git push -f origin main; then :; fi",
+  'time -p bash -c "git push -f origin main"',
+  "time -p X=$(echo hi) diskutil eraseDisk APFS x disk4",
+  "time -p gh repo delete a/b",
+]);
+cases("deny", ["time -p env -C ~ rm -rf Documents", "time -- rm -rf ~", "time { rm -rf ~; }"]);
+
 // Pushes, judged in real repos: one on main, one on a feature branch, a folder outside any
 // repo, and a repo on main in a folder named push inside the feature one.
 describe("git push", () => {

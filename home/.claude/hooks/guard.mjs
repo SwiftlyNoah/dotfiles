@@ -617,7 +617,12 @@ function checkSimple(cmd, state) {
   // Substitutions run first, each in a subshell.
   for (const word of words) for (const part of word) if (part.sub) checkLine(part.sub, copy(state));
 
-  while (words.length && RESERVED.has(literal(words[0]))) words = words.slice(1);
+  while (words.length && RESERVED.has(literal(words[0]))) {
+    const reserved = literal(words[0]);
+    words = words.slice(1);
+    // The time keyword takes its own -p, and a -- after it, before the command it times.
+    if (reserved === "time") while (words.length && ["-p", "--"].includes(literal(words[0]))) words = words.slice(1);
+  }
   if (!words.length) return;
   const keyword = literal(words[0]);
   if (keyword === "for" || keyword === "select") {
