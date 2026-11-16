@@ -270,6 +270,38 @@ cases("deny", [
 ]);
 cases("pass", ["eval eval echo hi", "echo $(echo $(echo hi))", "eval eval eval eval eval eval eval echo hi"]);
 
+// A command inside a ${X:-...} operator, an arithmetic expansion or a redirection target
+// runs too, so it's checked like any other.
+cases("ask", [
+  "echo ${X:-$(git push --force origin main)}",
+  'echo "${X:-$(git push --force origin main)}"',
+  "echo ${X:-`git push --force origin main`}",
+  "echo ${X:-${Y:-$(git push --force origin main)}}",
+  "echo $(( $(git push --force origin main) ))",
+  'echo "$(( 1 + $(diskutil eraseDisk APFS X disk9) ))"',
+  'cat < "$(git push --force origin main)"',
+  "echo hi > $(diskutil eraseDisk APFS X disk9)",
+  "> $(git push --force origin main)",
+]);
+cases("deny", ["echo ${X:-$(rm -rf $UNKNOWN)}", "echo $(( $(rm -r $UNKNOWN) ))"]);
+cases("pass", ["echo ${X:-default}", "echo $((1 + 2))", "echo ${X:-$(date)}", 'echo "$(( $(wc -l < x.txt) + 1 ))"', "echo hi > $(mktemp)"]);
+
+// Brace expansion makes several words from one, the way bash and zsh both do.
+cases("deny", [
+  "rm -rf {/Users,/tmp/x}",
+  "rm -rf {$HOME,/tmp/x}",
+  "rm -rf {~,/tmp/x}",
+  "rm -rf {/tmp/x,~/Documents}",
+  "D=/Users; rm -rf {$D,/tmp/x}",
+  "D=/; rm -r {/tmp/a,$D}",
+  "rm -r {/tmp/a,.}",
+  "rm -r /tmp/x{,/../../Users}",
+  "git push --force origin {main,feature}",
+  "git push -f origin feature:{main,x}",
+]);
+// /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
+cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
+
 // Pushes, judged in real repos: one on main, one on a feature branch, a folder outside any
 // repo, and a repo on main in a folder named push inside the feature one.
 describe("git push", () => {

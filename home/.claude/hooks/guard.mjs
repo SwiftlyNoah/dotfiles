@@ -113,17 +113,41 @@ function closeBracket(s, i, open, close) {
   return s.length;
 }
 
-// Reads the expansion at the "$" at i: returns [part, index of its last character].
+// The commands substituted anywhere in text, however deep: what an arithmetic expansion or
+// a ${X:-...} operator runs.
+function commandsIn(text) {
+  const found = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\\") i++;
+    else if (text[i] === "`") {
+      const close = upTo(text.indexOf("`", i + 1), text);
+      found.push(text.slice(i + 1, close));
+      i = close;
+    } else if (text[i] === "$") {
+      const [part, last] = dollar(text, i, true);
+      if (part.sub) found.push(part.sub);
+      found.push(...(part.nested ?? []));
+      i = last;
+    }
+  }
+  return found;
+}
+
+// Reads the expansion at the "$" at i: returns [part, index of its last character]. A part
+// can carry nested: the commands its operator or arithmetic runs.
 function dollar(s, i, quoted) {
   const next = s[i + 1];
   if (next === "(") {
     const close = closeBracket(s, i + 1, "(", ")");
-    return [{ sub: s[i + 2] === "(" ? null : s.slice(i + 2, close), quoted }, close];
+    if (s[i + 2] === "(") return [{ sub: null, nested: commandsIn(s.slice(i + 3, close)), quoted }, close];
+    return [{ sub: s.slice(i + 2, close), quoted }, close];
   }
   if (next === "{") {
     const close = closeBracket(s, i + 1, "{", "}");
-    const m = /^([A-Za-z_]\w*|\d+|[@*#?$!-])([\s\S]*)$/.exec(s.slice(i + 2, close));
-    return [m ? { name: m[1], op: m[2], quoted } : { sub: null, quoted }, close];
+    const body = s.slice(i + 2, close);
+    const m = /^([A-Za-z_]\w*|\d+|[@*#?$!-])([\s\S]*)$/.exec(body);
+    const nested = commandsIn(m ? m[2] : body);
+    return [m ? { name: m[1], op: m[2], quoted, nested } : { sub: null, nested, quoted }, close];
   }
   if (!quoted && next === "'") {
     let j = i + 2;
@@ -139,7 +163,7 @@ function dollar(s, i, quoted) {
 
 function parse(line) {
   const items = [];
-  let cmd = { words: [], heredocs: [] };
+  let cmd = { words: [], heredocs: [], redirects: [] };
   let word = null;
   let redirect = false; // the next word is a redirection target, not an argument
   let heredocNext = null; // the next word is a here-document delimiter
@@ -158,14 +182,16 @@ function parse(line) {
       cmd.heredocs.push(doc);
       pending.push(doc);
       heredocNext = null;
-    } else if (redirect) redirect = false;
-    else cmd.words.push(word);
+    } else if (redirect) {
+      cmd.redirects.push(word);
+      redirect = false;
+    } else cmd.words.push(word);
     word = null;
   };
   const endCmd = () => {
     endWord();
-    if (cmd.words.length) items.push(cmd);
-    cmd = { words: [], heredocs: [] };
+    if (cmd.words.length || cmd.redirects.length) items.push(cmd);
+    cmd = { words: [], heredocs: [], redirects: [] };
     redirect = false;
   };
 
@@ -333,22 +359,83 @@ function mktemp(args, cwd) {
   return isAbsolute(templates[0]) || cwd ? resolve(cwd ?? "/", templates[0]) : null;
 }
 
+// Brace expansion comes before every other expansion, so only unquoted text written in the
+// command can make it. That text's {, "," and } (and a ~ that starts a word or follows
+// either) are marked with these, so that a value with a comma in it never splits.
+const [OPEN, COMMA, CLOSE, TILDE] = ["", "", "", ""];
+const marked = (text, start) =>
+  text.replace(start ? /(^|[{,])~/g : /([{,])~/g, `$1${TILDE}`).replaceAll("{", OPEN).replaceAll(",", COMMA).replaceAll("}", CLOSE);
+const unmarked = (s) => s.replace(new RegExp(`^${TILDE}(?=/|$)`), HOME).replace(/[-]/g, (c) => "{,}~"[c.charCodeAt(0) - 0xe000]);
+
+// {a,b} and {1..3} at their marks, as bash and zsh expand them.
+function braceExpand(s) {
+  for (let i = s.indexOf(OPEN); i !== -1; i = s.indexOf(OPEN, i + 1)) {
+    let depth = 0;
+    const cuts = [i];
+    let j = i;
+    for (; j < s.length; j++) {
+      if (s[j] === OPEN) depth++;
+      else if (s[j] === CLOSE && --depth === 0) break;
+      else if (s[j] === COMMA && depth === 1) cuts.push(j);
+    }
+    if (j === s.length) continue;
+    cuts.push(j);
+    const alternatives = cuts.length > 2 ? cuts.slice(0, -1).map((c, n) => s.slice(c + 1, cuts[n + 1])) : sequence(s.slice(i + 1, j));
+    if (!alternatives) continue;
+    const out = [];
+    for (const a of alternatives) {
+      out.push(...braceExpand(s.slice(0, i) + a + s.slice(j + 1)));
+      if (out.length > MAX_VALUES) throw new Unresolved("a brace expansion");
+    }
+    return out;
+  }
+  return [s];
+}
+
+function sequence(body) {
+  const m = /^(-?\d+|[a-zA-Z])\.\.(-?\d+|[a-zA-Z])(?:\.\.(-?\d+))?$/.exec(body);
+  const letters = m && /[a-zA-Z]/.test(m[1]);
+  if (!m || letters !== /[a-zA-Z]/.test(m[2])) return null;
+  const [a, b] = letters ? [m[1].charCodeAt(0), m[2].charCodeAt(0)] : [Number(m[1]), Number(m[2])];
+  const step = Math.abs(Number(m[3] ?? 1)) || 1;
+  if (Math.abs(b - a) / step >= MAX_VALUES) throw new Unresolved("a brace expansion");
+  const out = [];
+  for (let n = a; a <= b ? n <= b : n >= b; n += a <= b ? step : -step) out.push(letters ? String.fromCharCode(n) : String(n));
+  return out;
+}
+
+// Whether brace expansion makes several words of this one.
+function braced(word) {
+  const template = word.map((p) => ("text" in p && !p.quoted ? marked(p.text, false) : "x")).join("");
+  try {
+    return braceExpand(template).length > 1;
+  } catch (e) {
+    if (e instanceof Unresolved) return true;
+    throw e;
+  }
+}
+
 // Every value a word could take, or throws Unresolved naming what isn't known.
 function expand(word, state) {
   let values = [""];
   let split = false;
   word.forEach((part, k) => {
     let options;
-    if ("text" in part) {
-      const tilde = k === 0 && !part.quoted && /^~(?=\/|$)/.test(part.text);
-      options = [tilde ? HOME + part.text.slice(1) : part.text];
-    } else {
+    if ("text" in part) options = [part.quoted ? part.text : marked(part.text, k === 0)];
+    else {
       options = "name" in part ? lookup(part.name, part.op, state) : substitute(part.sub, state);
       if (!part.quoted && options.some((v) => /\s/.test(v))) split = true;
     }
     values = values.flatMap((v) => options.map((o) => v + o));
     if (values.length > MAX_VALUES) throw new Unresolved(raw(word));
   });
+  try {
+    values = values.flatMap(braceExpand).map(unmarked);
+  } catch (e) {
+    if (e instanceof Unresolved) throw new Unresolved(raw(word));
+    throw e;
+  }
+  if (values.length > MAX_VALUES) throw new Unresolved(raw(word));
   // An unquoted expansion with spaces in it splits into several words: judge those too.
   if (split) values = [...values, ...values.flatMap((v) => v.split(/\s+/).filter(Boolean))];
   return [...new Set(values)];
@@ -455,6 +542,7 @@ function one(word, state) {
 // Whether a word is sure to reach the command as exactly one argument: nothing unquoted in
 // it can split into several, vanish or match files.
 function oneArg(word, state) {
+  if (braced(word)) return false;
   const loose = word.filter((p) => !p.quoted);
   if (loose.some((p) => "text" in p && /[*?[]/.test(p.text))) return false;
   if (loose.every((p) => "text" in p)) return true;
@@ -656,8 +744,10 @@ function checkGit(words, strings, state, env) {
 
 function checkSimple(cmd, state) {
   let words = cmd.words;
-  // Substitutions run first, each in a subshell.
-  for (const word of words) for (const part of word) if (part.sub) checkLine(part.sub, copy(state));
+  // Substitutions run first, each in a subshell, also in redirection targets.
+  for (const word of [...words, ...cmd.redirects])
+    for (const part of word)
+      for (const inner of [part.sub, ...(part.nested ?? [])]) if (typeof inner === "string") checkLine(inner, copy(state));
 
   while (words.length && RESERVED.has(literal(words[0]))) {
     const reserved = literal(words[0]);
@@ -890,7 +980,9 @@ const ROOTISH = String.raw`(?:~|\$\{?HOME\}?|${HOME_RE}|/Users|/System|/Library|
 const CHILD = String.raw`(?:/+[^\s/'"\`;|&)]*)?`; // the root itself, or one level under it (~/me, ~/Library)
 const END = String.raw`/*\*?["']?(?=$|[\s;|&)\`"'])`;
 const RM_FLAGS = String.raw`\brm\b(?:\s+-[a-zA-Z-]*)*\s+-[a-zA-Z]*[rRf][a-zA-Z]*(?:\s+-[a-zA-Z-]*)*`;
-const RM_HARD = new RegExp(String.raw`${RM_FLAGS}[^\n;|&]*?(?:^|\s)["']?(?:/|${ROOTISH}${CHILD})${END}`);
+const TOP = String.raw`(?:/|${ROOTISH}${CHILD})`;
+// The path on its own, or as one choice of a brace expansion that starts the word ({~,/tmp/x}).
+const RM_HARD = new RegExp(String.raw`${RM_FLAGS}[^\n;|&]*?(?:^|\s)["']?(?:${TOP}${END}|\{(?:[^\s{}]*,)*${TOP}/*\*?(?=[,}]))`);
 const FIND_DELETE = new RegExp(String.raw`\bfind\s+["']?(?:/|${ROOTISH}${CHILD})${END}[^\n;|&]*-delete\b`);
 function hardRefusals(command) {
   if (RM_HARD.test(command))
