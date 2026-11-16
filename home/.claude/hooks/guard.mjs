@@ -55,7 +55,11 @@ const TMP = process.env.TMPDIR ? resolve(process.env.TMPDIR) : "/tmp";
 const TEMP_ROOTS = [...new Set(["/tmp", "/private/tmp", "/var/folders", "/private/var/folders", TMP])];
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 const RESERVED = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "done", "fi", "esac", "time"]);
-const WRAPPERS = new Set(["command", "builtin", "exec", "nohup", "time", "sudo", "env", "nice"]);
+// Commands that run the command after them, with how many words each takes before it
+// (timeout's duration, script's file). noglob, nocorrect and - are zsh's precommand words.
+const WRAPPERS = new Map(
+  Object.entries({ command: 0, builtin: 0, exec: 0, nohup: 0, time: 0, sudo: 0, doas: 0, env: 0, nice: 0, timeout: 1, gtimeout: 1, caffeinate: 0, stdbuf: 0, xargs: 0, arch: 0, xcrun: 0, script: 1, noglob: 0, nocorrect: 0, "-": 0, coproc: 0 }),
+);
 const DECLARE = new Set(["export", "declare", "local", "readonly", "typeset"]);
 const MAX_VALUES = 64;
 const MAX_DEPTH = 8;
@@ -690,28 +694,113 @@ function checkSimple(cmd, state) {
   if (lead < words.length) checkRun(cmd, words.slice(lead), state, child);
 }
 
-// A wrapper (sudo, env, nice...) runs the command after its options. An option can take
-// the next word as its value (nice -n 5 rm, env -u NAME rm), so the first word after the
-// options is judged both as the command and as a value, with the command after it. When an
-// option could change the working folder (env -C, sudo -D) it isn't known. env -S splits
-// its value into the command.
+// A wrapper (sudo, env, nice...) runs the command after its options, and after the words
+// it takes first (timeout's duration). An option can take the next word as its value
+// (nice -n 5 rm, env -u NAME rm), so the first word after the options is judged both as
+// the command and as a value, with the command after it. When an option could change the
+// working folder (env -C, sudo -D) it isn't known. env -S splits its value into the
+// command, and sudo -s or -i hands the command to a shell. xargs adds words from its
+// input, which the guard can't see.
 function checkRun(cmd, words, state, child) {
-  const wrapper = literal(words[0]);
+  const value = one(words[0], state);
+  if (value === null || !oneArg(words[0], state)) return checkUnread(cmd, words, state, child);
+  // zsh runs =git as the git on PATH.
+  if (/^=./.test(value)) words = [[{ text: value.slice(1), quoted: true }], ...words.slice(1)];
+  const wrapper = basename(value.replace(/^=/, ""));
   if (!WRAPPERS.has(wrapper)) return checkCommand(cmd, words, state, child);
   let k = 1;
   let chdir = false;
-  for (; k < words.length && (literal(words[k])?.startsWith("-") || (wrapper === "env" && assignment(words[k]))); k++) {
-    if (assignment(words[k])) assign(child, words[k], true);
-    const option = literal(words[k]) ?? "";
+  let shell = false;
+  let replace = false;
+  for (; k < words.length; k++) {
+    if (wrapper === "env" && assignment(words[k])) {
+      assign(child, words[k], true);
+      continue;
+    }
+    const option = one(words[k], state);
+    if (!option?.startsWith("-")) break;
     chdir ||= /^(-[^-]*[CD]|--chdir)/.test(option);
+    shell ||= wrapper === "sudo" && /^(-[a-zA-Z]*[si]|--shell$|--login$)/.test(option);
+    replace ||= wrapper === "xargs" && /^(-[IJi]|--replace)/.test(option);
     const split = wrapper === "env" && /^(-[^-]*S|--split-string(=|$))(.*)/s.exec(option);
-    if (split) checkLine([split[3], ...words.slice(k + 1).map((w) => single(w, state))].join(" "), copy(child));
+    if (!split) continue;
+    if ((split[3] || single(words[k + 1] ?? [], state)).includes("\\"))
+      decide("deny", "env -S reads backslashes its own way (\\_ splits words), so the guard can't check the command it runs. Write the command out without env -S and run it again.");
+    checkLine([split[3], ...words.slice(k + 1).map((w) => single(w, state))].join(" "), copy(child));
   }
   if (k === words.length) return;
   const moved = (s) => ({ ...copy(s), cwd: chdir ? null : s.cwd });
-  if (literal(words[k - 1])?.startsWith("-") && !WRAPPERS.has(literal(words[k])))
+  const next = one(words[k], state);
+  if (k > 1 && one(words[k - 1], state)?.startsWith("-") && !WRAPPERS.has(basename(next ?? "")))
     checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child));
-  checkRun(cmd, words.slice(k), chdir ? moved(state) : state, chdir ? moved(child) : child);
+  const run = words.slice(k + WRAPPERS.get(wrapper));
+  if (!run.length) return;
+  if (shell) checkLine(run.map((w) => single(w, state)).join(" "), moved(child));
+  const input = wrapper === "xargs" ? [...(replace ? run.slice(1).map(() => XARGS_INPUT) : run.slice(1)), XARGS_INPUT] : run.slice(1);
+  checkRun(cmd, [run[0], ...input], chdir ? moved(state) : state, chdir ? moved(child) : child);
+}
+
+// What xargs reads from its input: a word the guard can't work out.
+const XARGS_INPUT = [{ name: "(xargs input)", op: "", quoted: true }];
+
+// The names the guard has checks for, so that a command word it can only partly read
+// (${X}git, g?t) is judged as each of them it could be.
+const CHECKED = () => ["git", "gh", "rm", "diskutil", "dd", "eval", ...SHELLS, ...WRAPPERS.keys()];
+function globMatches(pattern, name) {
+  const source = pattern.replace(/[.+^${}()|\\]/g, "\\$&").replaceAll("[!", "[^").replaceAll("*", ".*").replaceAll("?", ".");
+  try {
+    return new RegExp(`^${source}$`).test(name);
+  } catch {
+    return false; // an unclosed [ matches only itself
+  }
+}
+
+// A command word the guard can't read, or one that could split, vanish or match files,
+// could be any command. What it could turn into is judged, and so are the words after it as
+// a command of their own (it could be empty, or a wrapper). A push after it is judged as a
+// git push, in a repo the guard can't name.
+function checkUnread(cmd, words, state, child) {
+  const [first, ...rest] = words;
+  const as = (name) => checkRun(cmd, [[{ text: name, quoted: true }], ...rest], state, child);
+  if (rest.length) checkRun(cmd, rest, state, child);
+  const tail = first.slice(first.findLastIndex((p) => !("text" in p)) + 1).map((p) => p.text).join("");
+  if (tail && tail !== raw(first)) as(tail);
+  let values = [];
+  try {
+    values = expand(first, state);
+  } catch (e) {
+    if (!(e instanceof Unresolved)) throw e;
+  }
+  for (const v of values) {
+    const pieces = v.split(/\s+/).filter(Boolean);
+    if (pieces.length) checkRun(cmd, [...pieces.map((t) => [{ text: t, quoted: true }]), ...rest], state, child);
+  }
+  for (const pattern of [raw(first), ...values].filter((v) => /[*?[]/.test(v)))
+    for (const name of CHECKED()) if (globMatches(basename(pattern), name)) as(name);
+  const push = words.findIndex((w, k) => k > 0 && one(w, state) === "push");
+  if (push !== -1 && one(first, state) === null)
+    checkGitPush({ words, state, options: [{ name: "-C", value: null }], command: "push", at: push, unread: null }, child);
+}
+
+// The command string a shell's -c runs: its first operand after every option (-o and -O
+// take a value, -- and - end the options). undefined without -c, null when it's missing.
+function shellString(strings) {
+  let c = false;
+  let k = 1;
+  for (; k < strings.length; k++) {
+    const s = strings[k];
+    if (s === "--" || s === "-") {
+      k++;
+      break;
+    }
+    if (/^[-+][a-zA-Z]+$/.test(s)) {
+      c ||= s[0] === "-" && s.includes("c");
+      if (/[oO]$/.test(s)) k++;
+    } else if (s === "--rcfile" || s === "--init-file") k++;
+    else if (!s.startsWith("--")) break;
+  }
+  if (!c) return undefined;
+  return k < strings.length ? strings[k] : null;
 }
 
 // A command's own checks, from its name on. child is what it runs with.
@@ -769,8 +858,9 @@ function checkCommand(cmd, words, state, child) {
   // A command handed to another shell runs there: check it too, with what that shell inherits.
   if (SHELLS.has(name)) {
     const inherited = { ...child, vars: new Map([...child.vars].filter(([k]) => child.exported.has(k))) };
-    const c = strings.findIndex((s, k) => k > 0 && /^-[a-zA-Z]*c[a-zA-Z]*$/.test(s));
-    if (c !== -1 && words[c + 1]) checkLine(strings[c + 1], inherited);
+    const c = shellString(strings);
+    if (c === null) decide("deny", `can't find the command ${name} -c runs, so the guard can't check it. Write it as ${name} -c '<command>' and run it again.`);
+    if (c !== undefined) checkLine(c, inherited);
     else for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
   }
   if (name === "eval") checkLine(strings.slice(1).join(" "), copy(state));
