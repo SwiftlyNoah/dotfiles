@@ -36,7 +36,7 @@
 // When the guard itself breaks, a Bash or Monitor call is refused and every other tool goes
 // on (see Running, at the end). Tests: node --test (guard.test.mjs).
 import { execFileSync } from "node:child_process";
-import { writeSync } from "node:fs";
+import { realpathSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import vm from "node:vm";
@@ -52,7 +52,8 @@ const OUTWARD = {
   mcp__claude_ai_Google_Drive__trash_file: "trashing a Drive file",
   mcp__claude_ai_Google_Drive__share_file: "sharing a Drive file",
 };
-const POOL_KEY = /claude-pool\/age-identity/;
+const POOL_KEY = /claude-pool\/+age-identity/i; // APFS ignores case
+const POOL_KEY_PATH = join(HOME, ".config", "claude-pool", "age-identity");
 const TMP = process.env.TMPDIR ? resolve(process.env.TMPDIR) : "/tmp";
 const TEMP_ROOTS = [...new Set(["/tmp", "/private/tmp", "/var/folders", "/private/var/folders", TMP])];
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
@@ -1018,8 +1019,31 @@ function checkGit(words, strings, state, env) {
   return keepsBranch(git);
 }
 
+// Whether a path, or a glob, could name the claude-pool key: in any case, and through a link
+// when follow is set or its name starts with "age".
+function namesPoolKey(path, follow) {
+  if (POOL_KEY.test(path) || (/[*?[]/.test(path) && globRegex(path, "i").test(POOL_KEY_PATH))) return true;
+  if (!follow && !/^age/i.test(basename(path))) return false;
+  try {
+    return POOL_KEY.test(realpathSync(path));
+  } catch {
+    return false; // nothing there
+  }
+}
+
 function checkSimple(cmd, state) {
   let words = cmd.words;
+  // Every word, after expansion and from the folder the command runs in, is kept off the key.
+  for (const word of [...words, ...cmd.redirects]) {
+    let values = [];
+    try {
+      values = expand(word, state);
+    } catch (e) {
+      if (!(e instanceof Unresolved)) throw e;
+    }
+    for (const value of values)
+      if (namesPoolKey(value) || (state.cwd && namesPoolKey(resolve(state.cwd, value)))) deny("the claude-pool key is never read or copied");
+  }
   // Substitutions run first, each in a subshell, also in redirection targets.
   for (const word of [...words, ...cmd.redirects])
     for (const part of word)
@@ -1462,7 +1486,7 @@ function judge(payload) {
       const socket = tool === "Monitor" && args?.command === undefined && args?.ws;
       if (!socket && typeof args?.command !== "string") throw new TypeError(`the ${tool} call has no command`);
       if (!socket) checkBash(args.command, cwd);
-    } else if (["Read", "Edit", "Write"].includes(tool) && POOL_KEY.test(args.file_path ?? ""))
+    } else if (["Read", "Edit", "Write"].includes(tool) && namesPoolKey(resolve(cwd, args.file_path ?? ""), true))
       deny("the claude-pool key is never read or copied");
     else if (OUTWARD[tool]) ask(OUTWARD[tool]);
   } catch (e) {

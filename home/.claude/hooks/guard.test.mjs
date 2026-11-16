@@ -1,7 +1,7 @@
 // Feeds PreToolUse payloads to guard.mjs and checks what it decides. Run: node --test
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
@@ -952,6 +952,42 @@ test("mail sends and Drive shares still ask", () => {
   assert.equal(decision(null, { tool: "mcp__claude_ai_Google_Drive__share_file", input: {} }), "ask");
   assert.equal(decision(null, { tool: "Read", input: { file_path: `${HOME}/.config/claude-pool/age-identity` } }), "deny");
   assert.equal(decision(null, { tool: "Read", input: { file_path: `${HOME}/notes.txt` } }), "pass");
+});
+
+// The claude-pool key is refused however it's named: APFS ignores case, a link can point at
+// it, and a glob can match it. The key here is an invented file under a temporary HOME.
+test("the claude-pool key is refused in any spelling, through a link or a glob", (t) => {
+  const home = mkdtempSync(join(tmpdir(), "guard-home-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const pool = join(home, ".config", "claude-pool");
+  mkdirSync(pool, { recursive: true });
+  writeFileSync(join(pool, "age-identity"), "invented\n");
+  symlinkSync(join(pool, "age-identity"), join(home, "key-link"));
+  symlinkSync(pool, join(home, "pool-link"));
+  const env = { ...process.env, HOME: home };
+  const paths = [".config/Claude-Pool/age-identity", ".config/claude-pool/AGE-IDENTITY", "key-link", "pool-link/age-identity", ".config/claude-pool//age-identity", ".config/claude-pool/./age-identity"];
+  for (const path of paths)
+    for (const tool of ["Read", "Edit", "Write"]) assert.equal(decision(null, { tool, input: { file_path: `${home}/${path}` }, env }), "deny", `${tool} ${path}`);
+  assert.equal(decision(null, { tool: "Read", input: { file_path: join(pool, "config.json") }, env }), "pass");
+  for (const command of [
+    "cat ~/.config/claude-pool/age-ident*",
+    "cat ~/.config/Claude-Pool/age-identity",
+    "cat ~/.config/claude-pool/AGE*",
+    "cat ~/.config/claude-pool/*",
+    "cd ~/.config/claude-pool && cat age-*",
+    "cat ~/.config/claude-pool/age-identit?",
+    "cat ~/.config/*/age-identity",
+    "cat ~/.config/claude-p[o]ol/age-identity",
+    "cp ~/.config/claude-p$'o'ol/age-identity /tmp/x",
+    "cat ~/pool-link/age-identity",
+    "cat ~/.config/**/age-identity",
+    "cat < ~/.config/claude-pool/age-*",
+    'K=~/.config/claude-pool; cat "$K/age-identity"',
+    "cat ~/.config/claude-pool/./age-identity",
+  ])
+    assert.equal(decision(command, { env }), "deny", command);
+  for (const command of ["ls ~/.config/claude-pool", "cat ~/.config/claude-pool/config.json", "cat ~/.config/other/age-identity", "cat ~/*"])
+    assert.equal(decision(command, { env }), "pass", command);
 });
 
 // Monitor runs a shell command the way Bash does, so it gets every one of Bash's checks.
