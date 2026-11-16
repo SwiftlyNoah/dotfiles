@@ -71,7 +71,8 @@ const DEADLINE = 7_000; // on that clock; the hook's timeout in settings.json is
 const GIT_TIMEOUT_MS = 3_000; // at most, per git call
 const GIT_MARGIN_MS = 500; // every git call ends this long before the deadline
 
-// The first decision ends the checks: decide() throws it up to judge().
+// A refusal ends the checks: deny() throws it up to judge(). A question doesn't: ask() keeps
+// the first one and the checks go on, since a refusal later in the line outranks it.
 class Verdict {
   constructor(decision, reason) {
     this.decision = decision;
@@ -79,8 +80,13 @@ class Verdict {
   }
 }
 
-function decide(decision, reason) {
-  throw new Verdict(decision, reason);
+function deny(reason) {
+  throw new Verdict("deny", reason);
+}
+
+let asked = null;
+function ask(reason) {
+  asked ??= new Verdict("ask", reason);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -504,8 +510,7 @@ const underTemp = (p) => TEMP_ROOTS.some((root) => p.startsWith(`${root}/`));
 const atOrUnderTemp = (p) => TEMP_ROOTS.some((root) => p === root || p.startsWith(`${root}/`));
 
 function unresolvedRm(target, what) {
-  decide(
-    "deny",
+  deny(
     `can't tell what rm -r ${target} would remove, because ${what} isn't known to the guard. Write the path out literally, or assign the variable earlier in this same command (D=/full/path; rm -r "$D"), and run it again.`,
   );
 }
@@ -538,7 +543,7 @@ function checkRm(words, state) {
       if (!isAbsolute(prefix) && !state.cwd) unresolvedRm(raw(word), "the folder an earlier cd moved to");
       const path = resolve(state.cwd ?? "/", prefix || ".");
       if (glob ? atOrUnderTemp(prefix === "" || prefix.endsWith("/") ? path : dirname(path)) : underTemp(path)) continue;
-      if (top(path) || top(dirname(path))) decide("deny", `rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}`);
+      if (top(path) || top(dirname(path))) deny(`rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}`);
     }
   }
 }
@@ -566,7 +571,7 @@ function oneArg(word, state) {
 }
 
 const unknownGit = (what, fix) =>
-  decide("deny", `can't tell ${what}, so it could be a force push to main or master. ${fix} and run it again.`);
+  deny(`can't tell ${what}, so it could be a force push to main or master. ${fix} and run it again.`);
 const unknownPush = (what) => unknownGit(what, "Name the branch literally (git push --force origin <branch>)");
 
 // The argument git gets from git.words[k], or null when the guard can't work it out. The
@@ -586,7 +591,7 @@ function gitArg(git, k, known = true) {
 const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source", "--shallow-file"];
 
 const redirects = (what) =>
-  decide("deny", `${what} can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
+  deny(`${what} can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
 
 // Config that can't run a program or change where a push goes, and so is safe to give git
 // on the command line or to write with git config: everything else is refused (a pager, an
@@ -755,7 +760,7 @@ function checkGitPush(git, env) {
   if (git.unread) {
     const { word, split } = git.unread;
     if (!forced)
-      decide("ask", `${git.command ? "git push" : "git"} with ${word}, which the guard can't read, so it could be a force push to main or master`);
+      return ask(`${git.command ? "git push" : "git"} with ${word}, which the guard can't read, so it could be a force push to main or master`);
     if (split) unknownGit(`what git gets from ${word}, which could split into several words, vanish or match files`, `Quote it ("${word}")`);
     unknownGit(`what git does with ${word}`, "Write it out literally");
   }
@@ -764,7 +769,7 @@ function checkGitPush(git, env) {
     if (config) checkPushConfig(git, env, false);
     return;
   }
-  if (every || refspecs.includes(":")) decide("ask", "force push of every branch, main included");
+  if (every || refspecs.includes(":")) return ask("force push of every branch, main included");
 
   // Where each refspec lands. Without one, or with HEAD, that's the branch the repo is on.
   const targets = refspecs.map((r) => r.split(":").at(-1));
@@ -775,7 +780,7 @@ function checkGitPush(git, env) {
   }
   // git finds a short name like heads/main under refs/ on the remote.
   const protectedBranch = targets.find((t) => /(^|\/)(main|master)$/.test(t) || t.includes("*"));
-  if (protectedBranch) decide("ask", `force push to ${protectedBranch}`);
+  if (protectedBranch) return ask(`force push to ${protectedBranch}`);
   if (config) checkPushConfig(git, env, true);
 }
 
@@ -783,20 +788,20 @@ function checkGitPush(git, env) {
 // push refspec or mirror setting, and push.default (only current and simple push just the
 // branch the repo is on). A push that doesn't force and can't be looked up is asked about.
 function checkPushConfig(git, env, forced) {
-  const unknown = (what) => (forced ? unknownPush(what) : decide("ask", `git push with no branch named, and the guard can't tell ${what}`));
+  const unknown = (what) => (forced ? unknownPush(what) : ask(`git push with no branch named, and the guard can't tell ${what}`));
   const dir = gitFolder(git.options, git.state, env);
-  if (dir === null) unknown("which repo this push runs in");
+  if (dir === null) return unknown("which repo this push runs in");
   let config;
   try {
     config = gitConfig(dir, ["--get-regexp", String.raw`^(remote\..*\.(push|mirror)|push\.default)$`]);
   } catch (e) {
-    unknown(`where git's config sends this push (${e.message})`);
+    return unknown(`where git's config sends this push (${e.message})`);
   }
   for (const line of config.split("\n").filter(Boolean)) {
     const [key, value = ""] = line.split(/ (.*)/s);
-    if (/\.mirror$/i.test(key) && /^(true|yes|on|1)$/i.test(value)) decide("ask", `git push with ${key} set, which force pushes every branch, main included`);
-    if (/\.push$/i.test(key) && (forced || /^[+:]/.test(value))) decide("ask", `git push with ${key} ${value} set, which can force push to main or master`);
-    if (/^push\.default$/i.test(key) && forced && !["current", "simple"].includes(value)) decide("ask", `force push with push.default ${value}, which can push to main or master`);
+    if (/\.mirror$/i.test(key) && /^(true|yes|on|1)$/i.test(value)) return ask(`git push with ${key} set, which force pushes every branch, main included`);
+    if (/\.push$/i.test(key) && (forced || /^[+:]/.test(value))) return ask(`git push with ${key} ${value} set, which can force push to main or master`);
+    if (/^push\.default$/i.test(key) && forced && !["current", "simple"].includes(value)) return ask(`force push with push.default ${value}, which can push to main or master`);
   }
 }
 
@@ -835,12 +840,12 @@ const quote = (s) => `'${s.replaceAll("'", String.raw`'\''`)}'`;
 function checkAlias(git, env) {
   const what = `git ${git.command}, which could be an alias the guard`;
   const dir = gitFolder(git.options, git.state, env);
-  if (dir === null) decide("ask", `${what} can't look up, since it can't tell which repo this runs in`);
+  if (dir === null) return ask(`${what} can't look up, since it can't tell which repo this runs in`);
   let alias;
   try {
     alias = gitConfig(dir, ["--get", `alias.${git.command}`]).replace(/\n$/, "");
   } catch (e) {
-    decide("ask", `${what} couldn't look up (${e.message})`);
+    return ask(`${what} couldn't look up (${e.message})`);
   }
   if (!alias) return;
   const args = git.words.slice(git.at + 1).map((w) => (one(w, git.state) === null ? raw(w) : quote(one(w, git.state))));
@@ -860,8 +865,8 @@ function checkGhApi(strings) {
   }
   if ((method ?? (fields ? "POST" : "GET")).toUpperCase() === "GET") return;
   const ref = strings.map((s) => /^\/?repos\/[^/]+\/[^/]+\/git\/refs\/heads\/(.*)$/.exec(s)?.[1]).find((r) => r !== undefined);
-  if (ref !== undefined && /^(main|master)\/?$|[$`*]/.test(ref)) decide("ask", `changing or deleting the ${ref} branch through the GitHub API`);
-  if (strings.includes("graphql") && strings.some((s) => /\b(deleteRef|updateRefs?)\b/.test(s))) decide("ask", "changing or deleting a branch through the GitHub API");
+  if (ref !== undefined && /^(main|master)\/?$|[$`*]/.test(ref)) ask(`changing or deleting the ${ref} branch through the GitHub API`);
+  if (strings.includes("graphql") && strings.some((s) => /\b(deleteRef|updateRefs?)\b/.test(s))) ask("changing or deleting a branch through the GitHub API");
 }
 
 // git commands that never switch the branch a repo is on, and other commands that change
@@ -902,7 +907,7 @@ function checkGit(words, strings, state, env) {
   if (git.unread || git.command === null) return false;
   if (git.command === "config") checkGitConfig(git);
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
-    decide("deny", "git remote --mirror makes every later push to that remote a force push of every branch, main included. Leave it out and run it again.");
+    deny("git remote --mirror makes every later push to that remote a force push of every branch, main included. Leave it out and run it again.");
   if (!GIT_BUILTINS.has(git.command)) checkAlias(git, env);
   return keepsBranch(git);
 }
@@ -982,7 +987,7 @@ function checkRun(cmd, words, state, child) {
     const split = wrapper === "env" && /^(-[^-]*S|--split-string(=|$))(.*)/s.exec(option);
     if (!split) continue;
     if ((split[3] || single(words[k + 1] ?? [], state)).includes("\\"))
-      decide("deny", "env -S reads backslashes its own way (\\_ splits words), so the guard can't check the command it runs. Write the command out without env -S and run it again.");
+      deny("env -S reads backslashes its own way (\\_ splits words), so the guard can't check the command it runs. Write the command out without env -S and run it again.");
     checkLine([split[3], ...words.slice(k + 1).map((w) => single(w, state))].join(" "), copy(child));
   }
   if (k === words.length) return;
@@ -1116,18 +1121,18 @@ function checkCommand(cmd, words, state, child) {
   // Whether the branch is still the one git reports, once this has run.
   let readOnly = checkGit(words, strings, state, child) || READ_ONLY.has(name);
   const [, sub, sub2] = strings;
-  if (name === "gh" && sub === "repo" && sub2 === "delete") decide("ask", "deleting a GitHub repo");
+  if (name === "gh" && sub === "repo" && sub2 === "delete") ask("deleting a GitHub repo");
   if (name === "gh" && sub === "api") checkGhApi(strings);
   if (name === "gh" && sub === "api" && strings.some((w) => /^(-X|--method)=?DELETE$/i.test(w) || w === "DELETE") && strings.some((w) => /^\/?repos\/[^/]+\/[^/]+\/?$/.test(w)))
-    decide("ask", "deleting a GitHub repo");
-  if (name === "diskutil" && /^(erase|zero|randomDisk|secureErase|partitionDisk)/i.test(sub ?? "")) decide("ask", `diskutil ${sub}`);
-  if (name === "dd" && strings.some((w) => /^of=\/dev\//.test(w))) decide("ask", "dd to a device");
+    ask("deleting a GitHub repo");
+  if (name === "diskutil" && /^(erase|zero|randomDisk|secureErase|partitionDisk)/i.test(sub ?? "")) ask(`diskutil ${sub}`);
+  if (name === "dd" && strings.some((w) => /^of=\/dev\//.test(w))) ask("dd to a device");
 
   // A command handed to another shell runs there: check it too, with what that shell inherits.
   if (SHELLS.has(name)) {
     const inherited = { ...child, vars: new Map([...child.vars].filter(([k]) => child.exported.has(k))) };
     const c = shellString(strings);
-    if (c === null) decide("deny", `can't find the command ${name} -c runs, so the guard can't check it. Write it as ${name} -c '<command>' and run it again.`);
+    if (c === null) deny(`can't find the command ${name} -c runs, so the guard can't check it. Write it as ${name} -c '<command>' and run it again.`);
     if (c !== undefined) checkLine(c, inherited);
     else for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
     // What runs there was checked, and marked the branch unknown if it could change it.
@@ -1142,7 +1147,7 @@ function checkCommand(cmd, words, state, child) {
 
 function checkLine(line, state) {
   // Past this depth the guard can no longer see what runs, so it refuses rather than let it through.
-  if (state.depth >= MAX_DEPTH) decide("deny", "the command nests eval, sh -c or $( ) too deeply for the guard to check. Write it out flat.");
+  if (state.depth >= MAX_DEPTH) deny("the command nests eval, sh -c or $( ) too deeply for the guard to check. Write it out flat.");
   state = { ...state, depth: state.depth + 1 };
   const outer = [];
   for (const item of parse(line)) {
@@ -1170,17 +1175,17 @@ const RM_HARD = new RegExp(String.raw`${RM_FLAGS}[^\n;|&]*?(?:^|\s)["']?(?:${TOP
 const FIND_DELETE = new RegExp(String.raw`\bfind\s+["']?(?:/|${ROOTISH}${CHILD})${END}[^\n;|&]*-delete\b`);
 function hardRefusals(command) {
   if (RM_HARD.test(command))
-    decide("deny", "rm -r or rm -f on /, a system folder, my home folder or a folder directly in it is never run by an agent, in any form (also inside quotes, here-documents or backticks). Name the exact path inside a project or temp folder instead.");
-  if (FIND_DELETE.test(command)) decide("deny", "find -delete from /, my home folder or a folder directly in it is never run by an agent");
+    deny("rm -r or rm -f on /, a system folder, my home folder or a folder directly in it is never run by an agent, in any form (also inside quotes, here-documents or backticks). Name the exact path inside a project or temp folder instead.");
+  if (FIND_DELETE.test(command)) deny("find -delete from /, my home folder or a folder directly in it is never run by an agent");
   // An unquoted here-document expands `...` and $(...) in its body: refuse any body that holds them.
   const re = /<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/g;
   for (const m of command.matchAll(re))
     if (!m[1] && /`|\$\(/.test(m[3]))
-      decide("deny", `this here-document (<<${m[2]}) is unquoted and its body holds backticks or $( ), which the shell would run. Quote the delimiter (<<'${m[2]}') or write the text to a file with the Write tool and pass the file.`);
+      deny(`this here-document (<<${m[2]}) is unquoted and its body holds backticks or $( ), which the shell would run. Quote the delimiter (<<'${m[2]}') or write the text to a file with the Write tool and pass the file.`);
 }
 
 function checkBash(command, cwd) {
-  if (POOL_KEY.test(command)) decide("deny", "the claude-pool key is never read or copied");
+  if (POOL_KEY.test(command)) deny("the claude-pool key is never read or copied");
   hardRefusals(command);
   const start = (stale) => ({ vars: new Map(), exported: new Set(), cwd, depth: 0, repo: { stale, read: false, staleAfterRead: false, loop: false } });
   const first = start(false);
@@ -1193,6 +1198,7 @@ function checkBash(command, cwd) {
 function judge(payload) {
   const { tool_name: tool, tool_input: args = {}, cwd = process.cwd() } = payload;
   if (typeof tool !== "string") throw new TypeError("the payload names no tool");
+  asked = null;
   try {
     if (SHELL_TOOLS.has(tool)) {
       // Monitor can open a WebSocket instead of running a command.
@@ -1200,13 +1206,13 @@ function judge(payload) {
       if (!socket && typeof args?.command !== "string") throw new TypeError(`the ${tool} call has no command`);
       if (!socket) checkBash(args.command, cwd);
     } else if (["Read", "Edit", "Write"].includes(tool) && POOL_KEY.test(args.file_path ?? ""))
-      decide("deny", "the claude-pool key is never read or copied");
-    else if (OUTWARD[tool]) decide("ask", OUTWARD[tool]);
+      deny("the claude-pool key is never read or copied");
+    else if (OUTWARD[tool]) ask(OUTWARD[tool]);
   } catch (e) {
     if (e instanceof Verdict) return e;
     throw e;
   }
-  return null;
+  return asked;
 }
 
 // ---------------------------------------------------------------------------------------

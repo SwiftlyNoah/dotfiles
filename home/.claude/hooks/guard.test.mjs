@@ -303,6 +303,25 @@ cases("deny", [
 // /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
 cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
 
+// An ask never ends the checks: a refusal anywhere later in the line still wins, so
+// approving the question can't run what the guard refuses.
+cases("deny", [
+  'B=$(cat .branch); git push origin "$B"; X=~; rm -rf "$X"',
+  'git push origin "$B"; rm -rf "$U"',
+  'cd "$U"; git frob; X=~; rm -rf "$X"',
+  'git push origin "$B"; git push --force origin "$C"',
+  'cd "$U" && git push; X=~/Documents; rm -rf "$X"',
+  '/usr/bin/g?t push origin "$B"; X=~; rm -rf "$X"',
+  'git push --force origin main; X=~; rm -rf "$X"',
+  'diskutil eraseDisk APFS X disk9; rm -rf "$U"',
+  'gh repo delete a/b && X=~/Library && rm -rf "$X"',
+]);
+cases("ask", ['git push origin "$B"; git push --force origin main', 'diskutil eraseDisk APFS X disk9; git push origin "$B"']);
+
+test("the question names the first thing asked about", () => {
+  assert.match(reason('git push origin "$B"; diskutil eraseDisk APFS X disk9'), /git push with \$B/);
+});
+
 // Pushes, judged in real repos: one on main, one on a feature branch, a folder outside any
 // repo, and a repo on main in a folder named push inside the feature one.
 describe("git push", () => {
