@@ -562,21 +562,24 @@ function gitFolder(options, state, env) {
   return dir;
 }
 
-// git push's long options that take a value (the next word, or after "="), that force, and
-// that push every branch. git takes any prefix of one that names only it.
+// git push's long options that take a value (the next word, or after "="), that force or
+// delete, and that push every branch. git takes any prefix of one that names only it.
+// --prune deletes every remote branch with no local one; with no refspec that's any branch.
 const PUSH_VALUES = ["repo", "receive-pack", "exec", "recurse-submodules", "push-option"];
-const PUSH_FORCE = ["force", "force-with-lease", "force-if-includes", "mirror", "delete"];
+const PUSH_FORCE = ["force", "force-with-lease", "force-if-includes", "mirror", "delete", "prune"];
 const PUSH_EVERY = ["all", "branches", "mirror"];
 const prefixOf = (name) => (option) => option.startsWith(name);
 
 // git push [options] [remote [refspec...]], with options anywhere until "--". Deleting a
 // branch counts as forcing it, and so does --mirror. A push with a word the guard can't
 // read is refused when it forces and asked about when it doesn't, since the word itself
-// could force it.
+// could force it. git send-pack is read the same way: with no ref named it pushes every
+// branch both sides have, and --stdin reads the refs from a place the guard can't see.
 function checkGitPush(git, env) {
   const { words, state } = git;
   let forced = false;
   let every = false;
+  let pruned = false;
   let ended = false;
   const operands = [];
   for (let k = git.at + 1; k < words.length; k++) {
@@ -587,6 +590,8 @@ function checkGitPush(git, env) {
     else if (arg.startsWith("--")) {
       const name = arg.slice(2).split("=")[0];
       if (name.startsWith("no-")) continue;
+      if (git.command === "send-pack" && name === "stdin") git.unread ??= { word: "the refs send-pack reads from stdin", split: false };
+      pruned ||= name.length > 1 && "prune".startsWith(name);
       forced ||= name.startsWith("force") || PUSH_FORCE.some(prefixOf(name));
       every ||= PUSH_EVERY.some(prefixOf(name));
       if (!arg.includes("=") && PUSH_VALUES.some(prefixOf(name)) && ++k < words.length) gitArg(git, k, false);
@@ -599,6 +604,7 @@ function checkGitPush(git, env) {
   }
   const refspecs = operands.slice(1).map((r) => r.replace(/^\+/, ""));
   forced ||= operands.some((r) => r.startsWith("+")) || refspecs.some((r) => r.startsWith(":"));
+  every ||= !refspecs.length && (pruned || git.command === "send-pack");
   if (git.unread) {
     const { word, split } = git.unread;
     if (!forced)
@@ -621,11 +627,27 @@ function checkGitPush(git, env) {
   if (protectedBranch) decide("ask", `force push to ${protectedBranch}`);
 }
 
+// gh api can move or delete a branch without git: a call that writes to main or master, or
+// to a branch the guard can't read, asks. gh sends GET unless told otherwise or given fields.
+function checkGhApi(strings) {
+  let method = null;
+  let fields = false;
+  for (let k = 2; k < strings.length; k++) {
+    const m = /^(?:-X|--method)(?:=?(.+))?$/.exec(strings[k]);
+    if (m) method = m[1] ?? strings[++k] ?? "";
+    fields ||= /^(-[fF]|--field|--raw-field|--input)/.test(strings[k] ?? "");
+  }
+  if ((method ?? (fields ? "POST" : "GET")).toUpperCase() === "GET") return;
+  const ref = strings.map((s) => /^\/?repos\/[^/]+\/[^/]+\/git\/refs\/heads\/(.*)$/.exec(s)?.[1]).find((r) => r !== undefined);
+  if (ref !== undefined && /^(main|master)\/?$|[$`*]/.test(ref)) decide("ask", `changing or deleting the ${ref} branch through the GitHub API`);
+  if (strings.includes("graphql") && strings.some((s) => /\b(deleteRef|updateRefs?)\b/.test(s))) decide("ask", "changing or deleting a branch through the GitHub API");
+}
+
 function checkGit(words, strings, state, env) {
   if (basename(strings[0]) !== "git") return;
   const git = gitCommand(words, state, env);
   // A word the guard can't read before the command could be the push itself.
-  if (git.command === "push" || git.unread) checkGitPush(git, env);
+  if (git.command === "push" || git.command === "send-pack" || git.unread) checkGitPush(git, env);
 }
 
 function checkSimple(cmd, state) {
@@ -738,6 +760,7 @@ function checkCommand(cmd, words, state, child) {
   checkGit(words, strings, state, child);
   const [, sub, sub2] = strings;
   if (name === "gh" && sub === "repo" && sub2 === "delete") decide("ask", "deleting a GitHub repo");
+  if (name === "gh" && sub === "api") checkGhApi(strings);
   if (name === "gh" && sub === "api" && strings.some((w) => /^(-X|--method)=?DELETE$/i.test(w) || w === "DELETE") && strings.some((w) => /^\/?repos\/[^/]+\/[^/]+\/?$/.test(w)))
     decide("ask", "deleting a GitHub repo");
   if (name === "diskutil" && /^(erase|zero|randomDisk|secureErase|partitionDisk)/i.test(sub ?? "")) decide("ask", `diskutil ${sub}`);

@@ -122,6 +122,26 @@ cases("ask", [
 ]);
 cases("deny", ["cat ~/.config/claude-pool/age-identity"]);
 
+// The GitHub API can force-move or delete main without git: any call that writes to it asks.
+cases("ask", [
+  "gh api -X PATCH repos/o/r/git/refs/heads/main -f sha=abc -F force=true",
+  "gh api -X DELETE repos/o/r/git/refs/heads/main",
+  "gh api --method=DELETE /repos/o/r/git/refs/heads/master",
+  "gh api -XPATCH repos/{owner}/{repo}/git/refs/heads/main -f sha=abc",
+  "gh api repos/o/r/git/refs/heads/main -f sha=abc",
+  "gh api repos/o/r/git/refs/heads/main --input body.json",
+  `gh api graphql -f query='mutation { deleteRef(input: {refId: "x"}) { clientMutationId } }'`,
+  `gh api graphql -f query='mutation { updateRefs(input: {}) { clientMutationId } }'`,
+  'gh api -X DELETE "repos/o/r/git/refs/heads/$B"',
+]);
+cases("pass", [
+  "gh api repos/o/r/git/refs/heads/main",
+  "gh api -X GET repos/o/r/git/refs/heads/main -f per_page=1",
+  "gh api -X DELETE repos/o/r/git/refs/heads/feature",
+  "gh api graphql -f query='{ viewer { login } }'",
+  "gh api repos/o/r/pulls -f title=x",
+]);
+
 // A wrapper's option can take the next word as its value, so the command it runs can start
 // at any later word. After env -C or sudo -D the working folder isn't known.
 cases("ask", [
@@ -349,6 +369,22 @@ describe("git push", () => {
     `GIT_DIR=${MAIN}/.git git push --force origin feature`,
   ]);
   at("pass", ["git push --force"], FEATURE);
+
+  // --prune deletes every remote branch with no local one, main included, and send-pack
+  // pushes the way git push does.
+  at("ask", [
+    "git push --all --prune origin",
+    "git push --prune origin 'refs/heads/*:refs/heads/*'",
+    "git push --prune origin 'refs/heads/nothing/*:refs/heads/*'",
+    "git push --prune origin",
+    "git push --pru origin",
+    `git -C ${FEATURE} send-pack --force origin main`,
+    `git -C ${FEATURE} send-pack --force origin`,
+    `git -C ${FEATURE} send-pack origin +main`,
+    `git -C ${FEATURE} send-pack --all --force origin`,
+  ]);
+  at("deny", [`git -C ${FEATURE} send-pack --force --stdin origin`]);
+  at("pass", ["git push --prune origin feature", "git push --no-prune origin", "git send-pack origin feature", "git send-pack --force origin feature"], FEATURE);
   at("deny", [
     `R=$(echo ${MAIN}); cd $R && git push --force`,
     `cd "$(echo ${MAIN})" && git push --force`,
