@@ -203,6 +203,8 @@ describe("git push", () => {
       "git -C push push -f",
       "git -c core.quotepath=off -C push push --force",
       "git --namespace push -C push push --force",
+      "git --shallow-file push -C push push --force",
+      "git --shallow-file=x -C push push --force",
     ],
     FEATURE,
   );

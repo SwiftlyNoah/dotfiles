@@ -469,7 +469,8 @@ function gitArg(git, k, known = true) {
 }
 
 // git's own options that take a value: the next word, or for the long ones also after "=".
-const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"];
+// --shallow-file isn't in git's manual, but git reads it like the rest.
+const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source", "--shallow-file"];
 
 // Config that changes what a git command runs (an alias, an included file) or where a push
 // goes and whether it forces. push.default may be current or simple: both push the branch
