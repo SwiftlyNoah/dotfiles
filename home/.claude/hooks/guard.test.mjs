@@ -1,9 +1,10 @@
 // Feeds PreToolUse payloads to guard.mjs and checks what it decides. Run: node --test
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { homedir } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { after, describe, test } from "node:test";
 
 const GUARD = join(import.meta.dirname, "guard.mjs");
 const HOME = homedir();
@@ -119,6 +120,124 @@ cases("ask", [
   "dd if=x.img of=/dev/disk4",
 ]);
 cases("deny", ["cat ~/.config/claude-pool/age-identity"]);
+
+// Pushes, judged in real repos: one on main, one on a feature branch, a folder outside any
+// repo, and a repo on main in a folder named push inside the feature one.
+describe("git push", () => {
+  const root = mkdtempSync(join(tmpdir(), "guard-push-"));
+  const git = (...args) => spawnSync("git", args, { encoding: "utf8" });
+  const MAIN = join(root, "main");
+  const FEATURE = join(root, "feature");
+  const OUTSIDE = join(root, "outside");
+  const NESTED = join(FEATURE, "push");
+  git("init", "-q", "-b", "main", MAIN);
+  git("init", "-q", "-b", "feature", FEATURE);
+  git("init", "-q", "-b", "main", NESTED);
+  mkdirSync(OUTSIDE);
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  const at = (expected, commands, cwd = OUTSIDE) => {
+    for (const command of commands) test(`${expected}: ${command}`, () => assert.equal(decision(command, { cwd }), expected));
+  };
+
+  // git's own options come before its command, and some take a value: in
+  // git -C push push --force, the first "push" is a folder.
+  at(
+    "ask",
+    [
+      "git -C push push --force",
+      "git -C push push --force origin",
+      "git -C push push -f",
+      "git -c core.quotepath=off -C push push --force",
+      "git --namespace push -C push push --force",
+    ],
+    FEATURE,
+  );
+  at("pass", ["git -C push status", "git -C push push --force origin feature", "git commit -m push --force"], FEATURE);
+
+  // git push reads its options the way git does: values, shortened names, anywhere.
+  at(
+    "ask",
+    [
+      "git push --recurse-submodules no --force origin",
+      "git push --recurse no --force origin",
+      "git push --recurse-submodules=no --force origin",
+      "git push --force-w origin",
+      "git push --force-with-lease=main:abc origin",
+      "git push -o ci.skip -f origin",
+      "git push -uf origin",
+      "git push origin --force",
+      "git push --force origin HEAD:heads/main",
+      "git push origin :main",
+      "git push origin --delete main",
+      "git push -d origin master",
+      "git push --force -- origin main",
+    ],
+    MAIN,
+  );
+  at(
+    "pass",
+    [
+      "git push --follow-tags origin",
+      "git push -u origin feature",
+      "git push --no-force origin main",
+      "git push --force-with-lease origin feature",
+      "git push -o -f origin feature",
+      "git push --push-option --force origin feature",
+      "B=feature; git push --force origin $B",
+    ],
+    MAIN,
+  );
+
+  // Config given on the command line, or in git's environment, can send a push somewhere
+  // else or force it with no flag, or turn another command into a push (an alias).
+  at(
+    "deny",
+    [
+      "git -c remote.origin.push=+HEAD:refs/heads/main push origin",
+      "git -c Remote.origin.PUSH=+HEAD:refs/heads/main push origin",
+      "git -c remote.origin.mirror=true push origin",
+      "git --config-env remote.origin.push=SPEC push origin",
+      "git --config-env=remote.origin.push=SPEC push origin",
+      "git -c push.default=matching push --force origin",
+      "git -c push.default=upstream push --force",
+      "git --config-env push.default=MODE push --force",
+      "git -c alias.p='push --force' p origin main",
+      "git -c include.path=/tmp/x push origin",
+      "git -c includeIf.gitdir:/.path=/tmp/x push origin",
+      "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0=+HEAD:refs/heads/main git push origin",
+      "export GIT_CONFIG_PARAMETERS=x; git push origin",
+      "env GIT_CONFIG_GLOBAL=/tmp/x git push origin",
+    ],
+    FEATURE,
+  );
+  at("ask", ["git -c push.default=simple push --force", "git -c push.default=current push --force"], MAIN);
+
+  // A word whose value the guard can't work out could be push, --force or +main, and an
+  // unquoted one could split or vanish and move every word after it.
+  at(
+    "deny",
+    [
+      "git push origin $(echo +main)",
+      'git push origin "$(echo +main)"',
+      "git push $(echo --force) origin main",
+      "git $(echo push) --force origin main",
+      'X="push --force"; git $X origin main',
+      "X=; git -C push $X push --force",
+      "X=; git --git-dir $X status push --force origin main",
+      "git -C $(echo push) push --force origin feature",
+      "git push --force origin pus*",
+    ],
+    FEATURE,
+  );
+  at("pass", ['git -C "$(echo push)" status', "git push origin feature", "D=push; git -C $D status"], FEATURE);
+
+  test("a git refusal says how to fix the command", () => {
+    assert.match(reason("git push origin $(echo +main)", FEATURE), /can't tell what git does with \$\(echo \+main\).*Write it out literally/);
+    assert.match(reason("X=; git -C push $X push --force", FEATURE), /could split into several words, vanish or match files.*Quote it \("\$X"\)/);
+    assert.match(reason("git -c remote.origin.push=+HEAD:main push", FEATURE), /git -c remote\.origin\.push=\+HEAD:main can change .* Leave it out/);
+  });
+});
 
 // The 2026-11-16 incident and its relatives: refused even inside quotes, here-documents and backticks.
 cases("deny", [

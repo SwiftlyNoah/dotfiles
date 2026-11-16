@@ -7,7 +7,10 @@
 //
 //   - sending, replying to or forwarding mail, and trashing mail, events or Drive files
 //   - sharing a Google Drive file
-//   - a force push to main or master (including a push with no branch named, from main)
+//   - a force push to main or master, or deleting either (including a push with no branch
+//     named, from main; git's arguments are read the way git reads them, and git config on
+//     the command line or in git's environment that could redirect a push or define an
+//     alias is refused)
 //   - deleting a GitHub repo
 //   - rm -r on /, my home folder, or a folder directly in either (~/Documents, /Users)
 //   - erasing a disk (diskutil erase*, dd to a device)
@@ -406,24 +409,128 @@ function currentBranch(cwd) {
   }
 }
 
-const flags = (words) => words.filter((w) => w.startsWith("-"));
-const operands = (words) => words.filter((w) => !w.startsWith("-"));
+// The one value a word has, or null when it has several or one the guard can't work out.
+function one(word, state) {
+  try {
+    const values = expand(word, state);
+    return values.length === 1 ? values[0] : null;
+  } catch (e) {
+    if (e instanceof Unresolved) return null;
+    throw e;
+  }
+}
 
-function checkGitPush(words, cwd) {
-  // git [-C dir] push ...
-  const at = words.indexOf("push");
-  if (words[0] !== "git" || at === -1) return;
-  const args = words.slice(at + 1);
-  const forced =
-    args.some((w) => w === "--force" || w.startsWith("--force-with-lease") || w === "--force-if-includes") ||
-    flags(args).some((w) => /^-[a-zA-Z]*f/.test(w) && !w.startsWith("--")) ||
-    operands(args).some((w) => w.startsWith("+"));
+// Whether a word is sure to reach the command as exactly one argument: nothing unquoted in
+// it can split into several, vanish or match files.
+function oneArg(word, state) {
+  const loose = word.filter((p) => !p.quoted);
+  if (loose.some((p) => "text" in p && /[*?[]/.test(p.text))) return false;
+  if (loose.every((p) => "text" in p)) return true;
+  const value = one(word, state);
+  return value !== null && /\S/.test(value) && !/[*?[]/.test(value);
+}
+
+const unknownGit = (what, fix) =>
+  decide("deny", `can't tell ${what}, so it could be a force push to main or master. ${fix} and run it again.`);
+
+// The argument git gets from words[k]. It has to be one argument, since one that splits or
+// vanishes moves every word after it, and known unless only its place matters.
+function gitArg(words, k, state, known = true) {
+  const word = raw(words[k]);
+  const value = one(words[k], state);
+  if (value === null && known) unknownGit(`what git does with ${word}`, "Write it out literally");
+  if (!oneArg(words[k], state))
+    unknownGit(`what git gets from ${word}, which could split into several words, vanish or match files`, `Quote it ("${word}")`);
+  return value;
+}
+
+// git's own options that take a value: the next word, or for the long ones also after "=".
+const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source"];
+
+// Config that changes what a git command runs (an alias, an included file) or where a push
+// goes and whether it forces. push.default may be current or simple: both push the branch
+// the repo is on, which the guard checks.
+function checkConfig(option, value) {
+  const [key, setting] = value === null ? [null] : value.split(/=(.*)/s);
+  const runs = key === null || /^(alias\..|include\.path$|includeif\..*\.path$|remote\..*\.(push|mirror)$)/i.test(key);
+  const pushDefault = /^push\.default$/i.test(key ?? "") && (option === "--config-env" || !["current", "simple"].includes(setting));
+  if (runs || pushDefault)
+    decide(
+      "deny",
+      `git ${option} ${value ?? "with a value the guard can't work out"} can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`,
+    );
+}
+
+// git [options] <command> [args], read the way git reads it: its own options as
+// { name, value } (value null when the guard can't work it out), and the command and its
+// index. null when there's no command. env is what git runs with.
+function gitCommand(words, state, env) {
+  const config = [...env.exported].find((name) => name.startsWith("GIT_CONFIG"));
+  if (config)
+    decide("deny", `${config} in git's environment can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
+  const options = [];
+  for (let k = 1; k < words.length; k++) {
+    const arg = gitArg(words, k, state);
+    if (!arg.startsWith("-")) return { options, command: arg, at: k };
+    const eq = arg.startsWith("--") ? arg.indexOf("=") : -1;
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    if (!GIT_VALUES.includes(name)) continue;
+    if (eq === -1 && ++k === words.length) return null;
+    const value = eq === -1 ? gitArg(words, k, state, false) : arg.slice(eq + 1);
+    if (name === "-c" || name === "--config-env") checkConfig(name, value);
+    options.push({ name, value });
+  }
+  return null;
+}
+
+// The folder git works in: the shell's, moved by each -C.
+function gitFolder(options, cwd) {
+  let dir = cwd;
+  for (const { name, value } of options) if (name === "-C" && value !== null) dir = resolve(dir, value);
+  return dir;
+}
+
+// git push's long options that take a value (the next word, or after "="), that force, and
+// that push every branch. git takes any prefix of one that names only it.
+const PUSH_VALUES = ["repo", "receive-pack", "exec", "recurse-submodules", "push-option"];
+const PUSH_FORCE = ["force", "force-with-lease", "force-if-includes", "mirror", "delete"];
+const prefixOf = (name) => (option) => option.startsWith(name);
+
+// git push [options] [remote [refspec...]], with options anywhere until "--". Deleting a
+// branch counts as forcing it, and so does --mirror.
+function checkGitPush(words, { options, at }, state) {
+  let forced = false;
+  let ended = false;
+  const operands = [];
+  for (let k = at + 1; k < words.length; k++) {
+    const arg = gitArg(words, k, state);
+    if (ended || arg === "-" || !arg.startsWith("-")) operands.push(arg);
+    else if (arg === "--") ended = true;
+    else if (arg.startsWith("--")) {
+      const name = arg.slice(2).split("=")[0];
+      if (name.startsWith("no-")) continue;
+      forced ||= name.startsWith("force") || PUSH_FORCE.some(prefixOf(name));
+      if (!arg.includes("=") && PUSH_VALUES.some(prefixOf(name)) && ++k < words.length) gitArg(words, k, state, false);
+    } else {
+      // -fu, -d, -o value or -ovalue: what follows o in a cluster is its value.
+      const o = arg.indexOf("o");
+      forced ||= /[fd]/.test(o === -1 ? arg : arg.slice(0, o));
+      if (o === arg.length - 1 && ++k < words.length) gitArg(words, k, state, false);
+    }
+  }
+  const refspecs = operands.slice(1).map((r) => r.replace(/^\+/, ""));
+  forced ||= operands.some((r) => r.startsWith("+")) || refspecs.some((r) => r.startsWith(":"));
   if (!forced) return;
-  const dir = words[1] === "-C" ? resolve(cwd, words[2]) : cwd;
-  const refspecs = operands(args).slice(1);
-  const targets = refspecs.length ? refspecs.map((r) => r.replace(/^\+/, "").split(":").at(-1)) : [currentBranch(dir)];
-  const protectedBranch = targets.find((t) => /^(refs\/heads\/)?(main|master)$/.test(t));
+  const targets = refspecs.length ? refspecs.map((r) => r.split(":").at(-1)) : [currentBranch(gitFolder(options, state.cwd ?? state.base))];
+  // git finds a short name like heads/main under refs/ on the remote.
+  const protectedBranch = targets.find((t) => /(^|\/)(main|master)$/.test(t) || t.includes("*"));
   if (protectedBranch) decide("ask", `force push to ${protectedBranch}`);
+}
+
+function checkGit(words, strings, state, env) {
+  if (basename(strings[0]) !== "git") return;
+  const command = gitCommand(words, state, env);
+  if (command?.command === "push") checkGitPush(words, command, state);
 }
 
 function checkSimple(cmd, state) {
@@ -510,7 +617,7 @@ function checkSimple(cmd, state) {
   }
 
   if (name === "rm") checkRm(words, state);
-  checkGitPush(strings, state.cwd ?? state.base);
+  checkGit(words, strings, state, child);
   const [, sub, sub2] = strings;
   if (name === "gh" && sub === "repo" && sub2 === "delete") decide("ask", "deleting a GitHub repo");
   if (name === "gh" && sub === "api" && strings.some((w) => /^(-X|--method)=?DELETE$/i.test(w) || w === "DELETE") && strings.some((w) => /^\/?repos\/[^/]+\/[^/]+\/?$/.test(w)))
