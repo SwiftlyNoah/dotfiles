@@ -138,7 +138,7 @@ File paths that agents print (`lib/api/requestAPI.ts:142`) open in VS Code at th
 
 | From | Where it's declared | What |
 | --- | --- | --- |
-| Nix | `home.nix` | Node 24, Python 3.14, uv, ripgrep, fd, fzf, jq, lazygit, gitleaks, delta, git + LFS, Maple Mono |
+| Nix | `home.nix` | Node 24, Python 3.14 (with cryptography), uv, shellcheck, actionlint, ruff, vermin, ripgrep, fd, fzf, jq, lazygit, gitleaks, delta, git + LFS, Maple Mono |
 | npm (latest, in `~/.npm-global`) | `NPM_GLOBALS` in `home/bin/mac-update` | eas-cli, firebase-tools, vercel |
 | Homebrew | `brews` in `configuration.nix` | herdr, gh, age, php, CocoaPods, fastlane, OpenJDK 21, idb-companion, AXe, ffmpeg, tectonic, poppler, tidy, cliclick, terminal-notifier, xcodegen, cloudflared |
 | Homebrew casks | `casks` in `configuration.nix` | WezTerm, 1Password + CLI, Chrome, VS Code, Codex, Xcodes, Proxyman, Google Cloud CLI, AltTab, Hammerspoon, Maccy, LuLu, BlockBlock, OverSight, Tailscale |

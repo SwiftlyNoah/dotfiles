@@ -47,8 +47,14 @@ in
       lazygit
       gitleaks # secret scanning, in every repo's pre-commit
       nodejs_24 # Node: the newest LTS line, for every project
-      python314 # python3: the newest release
+      # python3: the newest release. cryptography is for claude-pool's site tests (scripts/check.sh
+      # fails when they skip without it).
+      (python314.withPackages (ps: [ ps.cryptography ]))
       uv # Python versions and project environments
+      shellcheck # claude-pool's scripts/check.sh lints with it
+      actionlint # claude-pool's scripts/check.sh lints with it
+      ruff # claude-pool's scripts/check.sh lints with it
+      vermin # claude-pool's scripts/check.sh lints with it
       maple-mono.NF # the font everything renders in: soft and round, with icons
     ];
 
