@@ -303,6 +303,17 @@ cases("deny", [
 // /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
 cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
 
+// A function's body is checked where it's defined, in either form.
+cases("ask", [
+  "function f { git push -f origin main; }; f",
+  "function f { diskutil eraseDisk APFS x disk9; }; f",
+  "function f() { git push -f origin main; }; f",
+  "f() { git push -f origin main; }; f",
+  "function f { time git push -f origin main; }",
+]);
+cases("deny", ['X=~; function f { rm -rf "$X"; }; f', 'function f { rm -rf "$U"; }']);
+cases("pass", ["function f { echo hi; }; f", "function f { git push origin feature; }; f"]);
+
 // $'...' is decoded the way bash and zsh decode it, so an escape can't hide what runs.
 cases("ask", [
   "git push origin $'\\x2bmain'",

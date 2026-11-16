@@ -994,9 +994,10 @@ function checkSimple(cmd, state) {
     for (const part of word)
       for (const inner of [part.sub, ...(part.nested ?? [])]) if (typeof inner === "string") checkLine(inner, copy(state));
 
-  while (words.length && RESERVED.has(literal(words[0]))) {
+  // function NAME { ...; } runs its body later: check it here, like any other command.
+  while (words.length && (RESERVED.has(literal(words[0])) || literal(words[0]) === "function")) {
     const reserved = literal(words[0]);
-    words = words.slice(1);
+    words = words.slice(reserved === "function" ? 2 : 1);
     if (reserved === "while" || reserved === "until") state.repo.loop = true;
     // The time keyword takes its own -p, and a -- after it, before the command it times.
     if (reserved === "time") while (words.length && ["-p", "--"].includes(literal(words[0]))) words = words.slice(1);
