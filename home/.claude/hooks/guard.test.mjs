@@ -320,8 +320,9 @@ describe("git push", () => {
   mkdirSync(OUTSIDE);
   after(() => rmSync(root, { recursive: true, force: true }));
 
+  // The guard asks git too, with the same config the setup has.
   const at = (expected, commands, cwd = OUTSIDE) => {
-    for (const command of commands) test(`${expected}: ${command}`, () => assert.equal(decision(command, { cwd }), expected));
+    for (const command of commands) test(`${expected}: ${command}`, () => assert.equal(decision(command, { cwd, env }), expected));
   };
 
   // git's own options come before its command, and some take a value: in
@@ -399,6 +400,73 @@ describe("git push", () => {
   );
   at("ask", ["git -c push.default=simple push --force", "git -c push.default=current push --force"], MAIN);
 
+  // Only a short list of config is safe to set for one command: anything else could run a
+  // program (a pager, an ssh command, fsmonitor, hooks) or send a push somewhere else. The
+  // same goes for git's environment, where HOME and XDG_CONFIG_HOME choose its config file,
+  // for set -a exporting what follows, and for git config writing such keys for later.
+  at(
+    "deny",
+    [
+      "git -c 'core.fsmonitor=git push --force origin main #' status",
+      "git -c core.pager='git push --force origin main;:' log",
+      "git -c core.pager='diskutil eraseDisk APFS X disk9' log",
+      "git -c core.sshCommand='git push --force origin main' fetch",
+      "git -c core.hooksPath=/tmp/h commit -m x",
+      "git -c push.default=matching push origin",
+      "git --config-env core.pager=P log",
+      "git --config-env=user.name log",
+      "git -c $K=1 log",
+      "GIT_PAGER='git push --force origin main' git log",
+      "GIT_SSH_COMMAND='git push --force origin main' git fetch",
+      "GIT_EXEC_PATH=/tmp/x git push origin",
+      "GIT_EDITOR='git push --force origin main' git commit",
+      "git --exec-path=/tmp/x push origin",
+      "HOME=/tmp/h git push origin",
+      "XDG_CONFIG_HOME=/tmp/x git push origin",
+      "export HOME=/tmp/h; git push origin",
+      "set -a; GIT_CONFIG_COUNT=1; GIT_CONFIG_KEY_0=remote.origin.push; GIT_CONFIG_VALUE_0=+HEAD:refs/heads/main; git push origin",
+      "set -o allexport; GIT_PAGER=x; git log",
+      "set -ea; HOME=/tmp/h; git push origin",
+      "git config remote.origin.push +HEAD:refs/heads/main && git push origin",
+      "git config alias.fp 'push --force origin main' && git fp",
+      "git config --global alias.p '!git push -f origin main'",
+      "git config set remote.origin.mirror true",
+      "git config --add include.path /tmp/x",
+      "git config core.pager 'git push --force origin main'",
+      "git config --rename-section x remote.origin",
+      "git config --edit",
+      "git config $K $V",
+      "git remote add --mirror=push backup /tmp/x",
+    ],
+    FEATURE,
+  );
+  at(
+    "pass",
+    [
+      "git -c color.ui=never log",
+      "git -c core.quotepath=off status",
+      "git -c user.name=x -c user.email=y commit -m z",
+      "git -c core.pager=cat log",
+      "git -c core.editor=true rebase --continue",
+      "git -c commit.gpgsign=false commit -m x",
+      "git --config-env=user.name=NAME log",
+      "GIT_EDITOR=true git rebase --continue",
+      "GIT_PAGER=cat git log",
+      "GIT_TERMINAL_PROMPT=0 git fetch",
+      "GIT_AUTHOR_DATE=2020-01-01 git commit -m x",
+      "HOME=$HOME git push origin feature",
+      "git config user.name x",
+      "git config --get remote.origin.url",
+      "git config --list",
+      "git config get alias.p",
+      "git config --get-regexp '^alias'",
+      "git config --unset remote.origin.push",
+      "set -a; set +a; GIT_PAGER=x; git log",
+      "git --exec-path",
+    ],
+    FEATURE,
+  );
+
   // A word whose value the guard can't work out could be push, --force or +main, and an
   // unquoted one could split or vanish and move every word after it. In a push that forces
   // or deletes it's refused; in one that doesn't, the guard asks.
@@ -452,6 +520,39 @@ describe("git push", () => {
   at("pass", pushHere, MAIN);
   at("ask", ['git push --force origin "$(git rev-parse --abbrev-ref HEAD)"', "git push -f origin $(git -C . branch --show-current)"], MAIN);
   at("ask", ['git push -u origin "$(git branch --show-current)"', 'git push origin "$(git symbolic-ref --short HEAD)"'], PLUS);
+
+  // Config set earlier, in the repo or for the user, can send a push with no refspec
+  // somewhere else, force it, or make a command an alias for a push, so the guard asks git.
+  const repo = (name, ...config) => {
+    const dir = join(root, name);
+    git("init", "-q", "-b", "feature", dir);
+    for (const [key, value] of config) git("-C", dir, "config", key, value);
+    return dir;
+  };
+  const REDIRECTED = repo("redirected", ["remote.origin.push", "+HEAD:refs/heads/main"]);
+  const MIRRORED = repo("mirrored", ["remote.backup.mirror", "true"]);
+  const MATCHING = repo("matching", ["push.default", "matching"]);
+  const UPSTREAM = repo("upstream", ["push.default", "upstream"]);
+  const ALIASED = repo(
+    "aliased",
+    ["alias.fp", "push --force origin main"],
+    ["alias.sh", "!git push --force origin main"],
+    ["alias.pf", "push --force"],
+    ["alias.st", "status"],
+    ["alias.rmall", "!rm -rf ~/Documents"],
+  );
+  at("ask", ["git push origin", "git push", "git push -u origin"], REDIRECTED);
+  at("pass", ["git push origin feature", "git status"], REDIRECTED);
+  at("ask", ["git push backup", "git push"], MIRRORED);
+  at("pass", ["git push origin feature"], MIRRORED);
+  at("ask", ["git push --force", "git push --force origin"], MATCHING);
+  at("pass", ["git push", "git push --force origin feature"], MATCHING);
+  at("ask", ["git push --force origin"], UPSTREAM);
+  at("pass", ["git push"], UPSTREAM);
+  at("ask", ["git fp", "git sh", "git -C . fp", "git pf origin main", "git --no-pager fp"], ALIASED);
+  at("deny", ["git rmall"], ALIASED);
+  at("pass", ["git st", "git zzguardnone", "git pf origin feature", "git pf"], ALIASED);
+  at("ask", ["cd $R && git fp", "cd $R && git push"]);
   at("ask", [`B=$(git -C ${MAIN} branch --show-current); git push --force origin $B`]);
   at("pass", [`B=$(git -C ${FEATURE} branch --show-current); git push --force origin $B`]);
   at("ask", ['git push -u origin "$(git branch --show-current)"']);

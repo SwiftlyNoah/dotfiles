@@ -490,7 +490,7 @@ function assign(state, word, exported) {
     values = null;
   }
   state.vars.set(name, values);
-  if (exported) state.exported.add(name);
+  if (exported || state.allexport) state.exported.add(name);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -582,18 +582,41 @@ function gitArg(git, k, known = true) {
 // --shallow-file isn't in git's manual, but git reads it like the rest.
 const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source", "--shallow-file"];
 
-// Config that changes what a git command runs (an alias, an included file) or where a push
-// goes and whether it forces. push.default may be current or simple: both push the branch
-// the repo is on, which the guard checks.
+const redirects = (what) =>
+  decide("deny", `${what} can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
+
+// Config that can't run a program or change where a push goes, and so is safe to give git
+// on the command line or to write with git config: everything else is refused (a pager, an
+// ssh command, fsmonitor, hooks, an alias, an include, a remote's push refspec). push.default
+// may be current or simple, which push the branch the repo is on, and a pager or editor one
+// of a few programs that do nothing else. value is undefined when the guard can't see it.
+const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less"]);
+function safeConfig(key, value) {
+  if (/^(user\.[^.]+|color\..+|advice\.[^.]+|core\.quotepath|commit\.gpgsign|tag\.gpgsign|init\.defaultbranch)$/i.test(key)) return true;
+  if (/^push\.default$/i.test(key)) return ["current", "simple"].includes(value);
+  if (/^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i.test(key)) return SAFE_PROGRAMS.has(value);
+  return false;
+}
+
+// git -c key[=value] (a bare key is true) and git --config-env key=VARIABLE.
 function checkConfig(option, value) {
   const [key, setting] = value === null ? [null] : value.split(/=(.*)/s);
-  const runs = key === null || /^(alias\..|include\.path$|includeif\..*\.path$|remote\..*\.(push|mirror)$)/i.test(key);
-  const pushDefault = /^push\.default$/i.test(key ?? "") && (option === "--config-env" || !["current", "simple"].includes(setting));
-  if (runs || pushDefault)
-    decide(
-      "deny",
-      `git ${option} ${value ?? "with a value the guard can't work out"} can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`,
-    );
+  const ok = key !== null && (option === "-c" ? safeConfig(key, setting ?? "true") : setting !== undefined && safeConfig(key, undefined));
+  if (!ok) redirects(`git ${option} ${value ?? "with a value the guard can't work out"}`);
+}
+
+// What git's environment may hold from this line: GIT_ variables that can't run a program
+// or choose a config file (GIT_DIR and GIT_WORK_TREE make the repo unknown instead), a
+// pager or editor from the safe few, and HOME and XDG_CONFIG_HOME only as they already are.
+const SAFE_GIT_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|FLUSH|PROGRESS_DELAY|ADVICE)$/;
+function checkGitEnv(env) {
+  for (const name of env.exported) {
+    if (!env.vars.has(name)) continue; // exported as it already was
+    const values = env.vars.get(name);
+    const program = /^GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)$/.test(name) && values?.every((v) => SAFE_PROGRAMS.has(v));
+    const kept = !["HOME", "XDG_CONFIG_HOME"].includes(name) || values?.every((v) => v === (name === "HOME" ? HOME : process.env.XDG_CONFIG_HOME));
+    if ((name.startsWith("GIT_") && !SAFE_GIT_ENV.test(name) && !program) || !kept) redirects(`${name} in git's environment`);
+  }
 }
 
 // git [options] <command> [args], read the way git reads it: its own options as
@@ -601,22 +624,21 @@ function checkConfig(option, value) {
 // index (command null when there's none, or when git.unread stopped the reading before
 // it). env is what git runs with.
 function gitCommand(words, state, env) {
-  const config = [...env.exported].find((name) => name.startsWith("GIT_CONFIG"));
-  if (config)
-    decide("deny", `${config} in git's environment can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
+  checkGitEnv(env);
   const git = { words, state, options: [], command: null, at: words.length, unread: null };
   const stop = (at, command = null) => Object.assign(git, { at, command });
   for (let k = 1; k < words.length; k++) {
     const arg = gitArg(git, k);
     if (git.unread) return stop(k);
     if (!arg.startsWith("-")) return stop(k, arg);
+    if (arg.startsWith("--exec-path=")) redirects(`git ${arg}`);
     const eq = arg.startsWith("--") ? arg.indexOf("=") : -1;
     const name = eq === -1 ? arg : arg.slice(0, eq);
     if (!GIT_VALUES.includes(name)) continue;
     if (eq === -1 && ++k === words.length) break;
     const value = eq === -1 ? gitArg(git, k, false) : arg.slice(eq + 1);
-    if (git.unread) return stop(k);
     if (name === "-c" || name === "--config-env") checkConfig(name, value);
+    if (git.unread) return stop(k);
     git.options.push({ name, value });
   }
   return git;
@@ -638,8 +660,23 @@ function runGit(dir, args) {
   } catch (e) {
     const within = `${+(timeout / 1000).toFixed(1)} s${timeout < GIT_TIMEOUT_MS ? ", the time the guard had left" : ""}`;
     const why = e.code ?? (e.signal ? `killed by ${e.signal}` : `exit ${e.status}`);
-    throw new Error(e.code === "ETIMEDOUT" ? `git didn't say within ${within}` : `git couldn't say: ${why}`);
+    throw Object.assign(new Error(e.code === "ETIMEDOUT" ? `git didn't say within ${within}` : `git couldn't say: ${why}`), { status: e.status });
   }
+}
+
+// What git config args prints in the repo at dir, "" when nothing is set (exit status 1).
+const configs = new Map();
+function gitConfig(dir, args) {
+  const key = `${dir}\0${args.join("\0")}`;
+  if (!configs.has(key)) {
+    try {
+      configs.set(key, runGit(dir, ["config", ...args]));
+    } catch (e) {
+      if (e.status !== 1) throw e;
+      configs.set(key, "");
+    }
+  }
+  return configs.get(key);
 }
 
 // Which branch the repo at dir is on. Any failure refuses the call: an answer read as
@@ -719,7 +756,11 @@ function checkGitPush(git, env) {
     if (split) unknownGit(`what git gets from ${word}, which could split into several words, vanish or match files`, `Quote it ("${word}")`);
     unknownGit(`what git does with ${word}`, "Write it out literally");
   }
-  if (!forced) return;
+  const config = !refspecs.length && !every;
+  if (!forced) {
+    if (config) checkPushConfig(git, env, false);
+    return;
+  }
   if (every || refspecs.includes(":")) decide("ask", "force push of every branch, main included");
 
   // Where each refspec lands. Without one, or with HEAD, that's the branch the repo is on.
@@ -732,6 +773,76 @@ function checkGitPush(git, env) {
   // git finds a short name like heads/main under refs/ on the remote.
   const protectedBranch = targets.find((t) => /(^|\/)(main|master)$/.test(t) || t.includes("*"));
   if (protectedBranch) decide("ask", `force push to ${protectedBranch}`);
+  if (config) checkPushConfig(git, env, true);
+}
+
+// With no refspec, git's config says where a push goes and whether it forces: a remote's
+// push refspec or mirror setting, and push.default (only current and simple push just the
+// branch the repo is on). A push that doesn't force and can't be looked up is asked about.
+function checkPushConfig(git, env, forced) {
+  const unknown = (what) => (forced ? unknownPush(what) : decide("ask", `git push with no branch named, and the guard can't tell ${what}`));
+  const dir = gitFolder(git.options, git.state, env);
+  if (dir === null) unknown("which repo this push runs in");
+  let config;
+  try {
+    config = gitConfig(dir, ["--get-regexp", String.raw`^(remote\..*\.(push|mirror)|push\.default)$`]);
+  } catch (e) {
+    unknown(`where git's config sends this push (${e.message})`);
+  }
+  for (const line of config.split("\n").filter(Boolean)) {
+    const [key, value = ""] = line.split(/ (.*)/s);
+    if (/\.mirror$/i.test(key) && /^(true|yes|on|1)$/i.test(value)) decide("ask", `git push with ${key} set, which force pushes every branch, main included`);
+    if (/\.push$/i.test(key) && (forced || /^[+:]/.test(value))) decide("ask", `git push with ${key} ${value} set, which can force push to main or master`);
+    if (/^push\.default$/i.test(key) && forced && !["current", "simple"].includes(value)) decide("ask", `force push with push.default ${value}, which can push to main or master`);
+  }
+}
+
+// git config that writes a key, other than one safeConfig allows, is refused, so that no
+// later command (in this line or another) is redirected by it. Reading and removing are fine.
+function checkGitConfig(git) {
+  const args = git.words.slice(git.at + 1).map((w) => one(w, git.state));
+  if (args.includes(null)) redirects("git config with a word the guard can't read");
+  let write = false;
+  let read = false;
+  const operands = [];
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k];
+    if (/^(-e|--edit|--rename-section)$/.test(a)) redirects(`git config ${a}`);
+    else if (/^--(unset|unset-all|remove-section)$/.test(a)) return;
+    else if (/^--(add|replace-all)$/.test(a)) write = true;
+    else if (/^(-l|--list|--get(-all|-regexp|-urlmatch|-color|-colorbool)?)$/.test(a)) read = true;
+    else if (/^(-f|--file|--blob|--type|--default|--comment|--value)$/.test(a)) k++;
+    else if (!a.startsWith("-")) operands.push(a);
+  }
+  const sub = ["get", "list", "set", "unset", "remove-section", "rename-section", "edit"].includes(operands[0]) ? operands.shift() : null;
+  if (sub === "rename-section" || sub === "edit") redirects(`git config ${sub}`);
+  if (sub === null ? read || (!write && operands.length <= 1) : sub !== "set") return;
+  const [key = "", value] = operands;
+  if (!safeConfig(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+}
+
+// git's own commands. Any other is an alias, or a git-<name> program on PATH.
+const GIT_BUILTINS = new Set(
+  "add am annotate apply archive bisect blame branch bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout cherry cherry-pick clean clone commit config count-objects describe diff difftool fetch for-each-ref format-patch fsck gc grep help init log ls-files ls-remote ls-tree merge merge-base mv notes pull push range-diff rebase reflog remote repack replace reset restore rev-list rev-parse revert rm send-pack shortlog show show-ref sparse-checkout stash status submodule switch symbolic-ref tag update-ref version worktree".split(" "),
+);
+const quote = (s) => `'${s.replaceAll("'", String.raw`'\''`)}'`;
+
+// An alias is judged as what it stands for, with the words after it: a shell command when
+// it starts with !, else a git command. One the guard can't look up is asked about.
+function checkAlias(git, env) {
+  const what = `git ${git.command}, which could be an alias the guard`;
+  const dir = gitFolder(git.options, git.state, env);
+  if (dir === null) decide("ask", `${what} can't look up, since it can't tell which repo this runs in`);
+  let alias;
+  try {
+    alias = gitConfig(dir, ["--get", `alias.${git.command}`]).replace(/\n$/, "");
+  } catch (e) {
+    decide("ask", `${what} couldn't look up (${e.message})`);
+  }
+  if (!alias) return;
+  const args = git.words.slice(git.at + 1).map((w) => (one(w, git.state) === null ? raw(w) : quote(one(w, git.state))));
+  const options = git.words.slice(1, git.at).map((w) => quote(single(w, git.state)));
+  checkLine(alias.startsWith("!") ? [alias.slice(1), ...args].join(" ") : ["git", ...options, alias, ...args].join(" "), copy(env));
 }
 
 // gh api can move or delete a branch without git: a call that writes to main or master, or
@@ -771,6 +882,11 @@ function checkGit(words, strings, state, env) {
   const git = gitCommand(words, state, env);
   // A word the guard can't read before the command could be the push itself.
   if (git.command === "push" || git.command === "send-pack" || git.unread) checkGitPush(git, env);
+  if (git.unread || git.command === null) return false;
+  if (git.command === "config") checkGitConfig(git);
+  if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
+    decide("deny", "git remote --mirror makes every later push to that remote a force push of every branch, main included. Leave it out and run it again.");
+  if (!GIT_BUILTINS.has(git.command)) checkAlias(git, env);
   return readOnlyGit(git);
 }
 
@@ -939,6 +1055,15 @@ function checkCommand(cmd, words, state, child) {
     for (const word of args) {
       if (assignment(word)) assign(state, word, exported);
       else if (exported && /^[A-Za-z_]\w*$/.test(literal(word) ?? "")) state.exported.add(literal(word));
+    }
+    return;
+  }
+  // set -a (or -o allexport) exports every variable assigned after it, until set +a.
+  if (name === "set") {
+    for (let k = 1; k < strings.length && strings[k] !== "--"; k++) {
+      const s = strings[k];
+      if (/^[-+]o$/.test(s) && strings[k + 1] === "allexport") state.allexport = s[0] === "-";
+      else if (/^[-+][a-zA-Z]*a/.test(s)) state.allexport = s[0] === "-";
     }
     return;
   }
