@@ -121,6 +121,33 @@ cases("ask", [
 ]);
 cases("deny", ["cat ~/.config/claude-pool/age-identity"]);
 
+// A wrapper's option can take the next word as its value, so the command it runs can start
+// at any later word. After env -C or sudo -D the working folder isn't known.
+cases("ask", [
+  "nice -n 5 git push --force origin main",
+  "env -u X git push --force origin main",
+  "sudo -u root git push -f origin main",
+  "sudo -u root nice -n 5 diskutil eraseDisk APFS X disk4",
+  "exec -a x dd if=x.img of=/dev/disk4",
+  "nice -n 5 gh repo delete a/b",
+  "env -S 'git push --force origin main'",
+  "env -Sgit push --force origin main",
+]);
+cases("deny", [
+  "nice -n 5 rm -rf ~/Documents",
+  "env -u X rm -rf ~/Documents",
+  "sudo -u root nice -n 5 rm -rf /Users",
+  "exec -a x rm -rf ~/Documents",
+  "env -S 'rm -rf ~/Documents'",
+  "env -Srm -rf ~/Documents",
+  "command cd ~ && rm -rf Documents",
+  "env -C ~ rm -rf Documents",
+  "sudo -D / rm -rf Users",
+  "env -C ~ git push --force",
+  "sudo -D / git push --force",
+]);
+cases("pass", ["nice -n 5 rm -rf /tmp/x", "sudo -u root ls -la", "env -u X npm test", "time make", "nice -n 5 git push --force origin feature"]);
+
 // Pushes, judged in real repos: one on main, one on a feature branch, a folder outside any
 // repo, and a repo on main in a folder named push inside the feature one.
 describe("git push", () => {

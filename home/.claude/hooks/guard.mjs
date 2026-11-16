@@ -644,17 +644,35 @@ function checkSimple(cmd, state) {
   }
   const child = copy(state);
   for (const word of words.slice(0, lead)) assign(child, word, true);
-  words = words.slice(lead);
-  while (WRAPPERS.has(literal(words[0]))) {
-    const wrapper = literal(words[0]);
-    words = words.slice(1);
-    while (words.length && (literal(words[0])?.startsWith("-") || (wrapper === "env" && assignment(words[0])))) {
-      if (assignment(words[0])) assign(child, words[0], true);
-      words = words.slice(1);
-    }
-  }
-  if (!words.length) return;
+  if (lead < words.length) checkRun(cmd, words.slice(lead), state, child);
+}
 
+// A wrapper (sudo, env, nice...) runs the command after its options. An option can take
+// the next word as its value (nice -n 5 rm, env -u NAME rm), so the first word after the
+// options is judged both as the command and as a value, with the command after it. When an
+// option could change the working folder (env -C, sudo -D) it isn't known. env -S splits
+// its value into the command.
+function checkRun(cmd, words, state, child) {
+  const wrapper = literal(words[0]);
+  if (!WRAPPERS.has(wrapper)) return checkCommand(cmd, words, state, child);
+  let k = 1;
+  let chdir = false;
+  for (; k < words.length && (literal(words[k])?.startsWith("-") || (wrapper === "env" && assignment(words[k]))); k++) {
+    if (assignment(words[k])) assign(child, words[k], true);
+    const option = literal(words[k]) ?? "";
+    chdir ||= /^(-[^-]*[CD]|--chdir)/.test(option);
+    const split = wrapper === "env" && /^(-[^-]*S|--split-string(=|$))(.*)/s.exec(option);
+    if (split) checkLine([split[3], ...words.slice(k + 1).map((w) => single(w, state))].join(" "), copy(child));
+  }
+  if (k === words.length) return;
+  const moved = (s) => ({ ...copy(s), cwd: chdir ? null : s.cwd });
+  if (literal(words[k - 1])?.startsWith("-") && !WRAPPERS.has(literal(words[k])))
+    checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child));
+  checkRun(cmd, words.slice(k), chdir ? moved(state) : state, chdir ? moved(child) : child);
+}
+
+// A command's own checks, from its name on. child is what it runs with.
+function checkCommand(cmd, words, state, child) {
   const strings = words.map((w) => single(w, state));
   const name = basename(strings[0]);
   const args = words.slice(1);
