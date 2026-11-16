@@ -59,9 +59,14 @@ const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 const SHELL_TOOLS = new Set(["Bash", "Monitor"]); // the tools that run a shell command
 const RESERVED = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "done", "fi", "esac", "time"]);
 // Commands that run the command after them, with how many words each takes before it
-// (timeout's duration, script's file). noglob, nocorrect and - are zsh's precommand words.
+// (timeout's duration, script's file, flock's lock, taskset's mask). noglob, nocorrect and
+// - are zsh's precommand words.
 const WRAPPERS = new Map(
-  Object.entries({ command: 0, builtin: 0, exec: 0, nohup: 0, time: 0, sudo: 0, doas: 0, env: 0, nice: 0, timeout: 1, gtimeout: 1, caffeinate: 0, stdbuf: 0, xargs: 0, arch: 0, xcrun: 0, script: 1, noglob: 0, nocorrect: 0, "-": 0, coproc: 0 }),
+  Object.entries({
+    ...{ command: 0, builtin: 0, exec: 0, nohup: 0, time: 0, sudo: 0, doas: 0, env: 0, nice: 0, timeout: 1, gtimeout: 1, caffeinate: 0, stdbuf: 0 },
+    ...{ xargs: 0, arch: 0, xcrun: 0, script: 1, noglob: 0, nocorrect: 0, "-": 0, coproc: 0, watch: 0, flock: 1, ionice: 0, taskset: 1 },
+    ...{ chronic: 0, unbuffer: 0, parallel: 0 },
+  }),
 );
 const DECLARE = new Set(["export", "declare", "local", "readonly", "typeset"]);
 const MAX_VALUES = 64;
@@ -481,7 +486,9 @@ function expand(word, state) {
 
 // The word as written, for messages and for words the guard can't expand.
 const raw = (word) =>
-  word.map((p) => ("text" in p ? p.text : "name" in p ? (p.op ? `\${${p.name}${p.op}}` : `$${p.name}`) : `$(${p.sub ?? "(...)"})`)).join("");
+  word
+    .map((p) => ("text" in p ? p.text : p.name === FOUND ? "{}" : "name" in p ? (p.op ? `\${${p.name}${p.op}}` : `$${p.name}`) : `$(${p.sub ?? "(...)"})`))
+    .join("");
 
 // The one value a word has, or else how it was written.
 function single(word, state) {
@@ -918,9 +925,32 @@ function checkAlias(git, env) {
     return ask(`${what} couldn't look up (${e.message})`);
   }
   if (!alias) return;
-  const args = git.words.slice(git.at + 1).map((w) => (one(w, git.state) === null ? raw(w) : quote(one(w, git.state))));
+  const args = argvLine(git.words.slice(git.at + 1), git.state);
   const options = git.words.slice(1, git.at).map((w) => quote(single(w, git.state)));
-  checkLine(alias.startsWith("!") ? [alias.slice(1), ...args].join(" ") : ["git", ...options, alias, ...args].join(" "), copy(env));
+  checkLine(alias.startsWith("!") ? `${alias.slice(1)} ${args}` : ["git", ...options, alias, args].join(" "), copy(env));
+}
+
+// What git runs for you: rebase's -x or --exec, submodule foreach and bisect run. Where it
+// runs (the top of the repo, each submodule) isn't known.
+function checkGitRuns(git, env) {
+  const args = git.words.slice(git.at + 1);
+  const strings = args.map((w) => single(w, git.state));
+  const inner = { ...copy(env), cwd: null };
+  const what = `git ${git.command}`;
+  if (git.command === "rebase")
+    for (let k = 0; k < args.length && strings[k] !== "--"; k++) {
+      const m = /^(?:--ex(?:ec?)?(?:=([\s\S]*))?|-[a-zA-Z]*?x([\s\S]*))$/.exec(strings[k]);
+      if (!m) continue;
+      const inline = m[1] ?? (m[2] || undefined);
+      checkString(inline === undefined ? args[++k] : [{ text: inline, quoted: true }], `${what} --exec`, git.state, inner);
+    }
+  if (git.command === "submodule") {
+    let k = strings.indexOf("foreach");
+    if (k === -1) return;
+    while (/^(--recursive|-q|--quiet)$/.test(strings[k + 1] ?? "")) k++;
+    checkRuns(args.slice(k + 1), `${what} foreach`, git.state, inner);
+  }
+  if (git.command === "bisect" && strings[0] === "run") checkRuns(args.slice(1), `${what} run`, git.state, inner);
 }
 
 // gh api can move or delete a branch without git: a call that writes to main or master, or
@@ -984,6 +1014,7 @@ function checkGit(words, strings, state, env) {
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
     deny("git remote --mirror makes every later push to that remote a force push of every branch, main included. Leave it out and run it again.");
   if (!GIT_BUILTINS.has(git.command)) checkAlias(git, env);
+  checkGitRuns(git, env);
   return keepsBranch(git);
 }
 
@@ -1037,8 +1068,8 @@ function checkSimple(cmd, state) {
 // (nice -n 5 rm, env -u NAME rm), so the first word after the options is judged both as
 // the command and as a value, with the command after it. When an option could change the
 // working folder (env -C, sudo -D) it isn't known. env -S splits its value into the
-// command, and sudo -s or -i hands the command to a shell. xargs adds words from its
-// input, which the guard can't see.
+// command, and sudo -s or -i hands the command to a shell, as watch always does and flock
+// does with -c. xargs and parallel add words from their input, which the guard can't see.
 function checkRun(cmd, words, state, child) {
   const value = one(words[0], state);
   if (value === null || !oneArg(words[0], state)) return checkUnread(cmd, words, state, child);
@@ -1048,7 +1079,7 @@ function checkRun(cmd, words, state, child) {
   if (!WRAPPERS.has(wrapper)) return checkCommand(cmd, words, state, child);
   let k = 1;
   let chdir = false;
-  let shell = false;
+  let shell = wrapper === "watch";
   let replace = false;
   for (; k < words.length; k++) {
     if (wrapper === "env" && assignment(words[k])) {
@@ -1073,6 +1104,8 @@ function checkRun(cmd, words, state, child) {
     checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child));
   const run = words.slice(k + WRAPPERS.get(wrapper));
   if (!run.length) return;
+  if (wrapper === "flock" && /^(-c|--command)$/.test(one(run[0], state) ?? "")) return checkString(run[1], "flock -c", state, moved(child));
+  if (wrapper === "parallel") return checkParallel(run, state, moved(child));
   if (shell) checkLine(run.map((w) => single(w, state)).join(" "), moved(child));
   const input = wrapper === "xargs" ? [...(replace ? run.slice(1).map(() => XARGS_INPUT) : run.slice(1)), XARGS_INPUT] : run.slice(1);
   checkRun(cmd, [run[0], ...input], chdir ? moved(state) : state, chdir ? moved(child) : child);
@@ -1080,6 +1113,69 @@ function checkRun(cmd, words, state, child) {
 
 // What xargs reads from its input: a word the guard can't work out.
 const XARGS_INPUT = [{ name: "(xargs input)", op: "", quoted: true }];
+
+// parallel joins the command before its ::: inputs into a line for the shell, with each
+// {...} replaced by an input, or the input added at the end. The inputs are known when a
+// single ::: lists them all in words the guard can read. With no command, they're the commands.
+function checkParallel(run, state, inherited) {
+  const strings = run.map((w) => single(w, state));
+  const marker = (s) => /^:{3,4}\+?$/.test(s);
+  const cut = upTo(strings.findIndex(marker), strings);
+  const sources = run.slice(cut + 1);
+  if (cut === 0) {
+    for (const word of sources) if (!marker(single(word, state))) checkString(word, "parallel", state, inherited);
+    return;
+  }
+  let inputs = ['"$(parallel-input)"'];
+  if (strings[cut] === ":::" && !strings.slice(cut + 1).some(marker))
+    try {
+      inputs = sources.flatMap((w) => expand(w, state)).map(quote);
+    } catch (e) {
+      if (!(e instanceof Unresolved)) throw e;
+    }
+  const line = strings.slice(0, cut).join(" ");
+  for (const input of inputs) {
+    const placed = line.replace(/\{[^{}\s]*\}/g, input);
+    checkLine(placed === line ? `${line} ${input}` : placed, copy(inherited));
+  }
+}
+
+// find runs the words between -exec, -execdir, -ok or -okdir and the ; (or {} +) that ends
+// them, with {} standing for what it finds: a start folder, or a path under one (rm won't
+// remove "." itself).
+const FOUND = "(what find finds)";
+function checkFind(cmd, words, state, child) {
+  const strings = words.map((w) => single(w, state));
+  let k = 1;
+  while (/^-[HLP]+$/.test(strings[k] ?? "")) k++;
+  const starts = [];
+  for (; k < words.length && !/^[-(!]/.test(strings[k]); k++) starts.push(words[k]);
+  let found = null;
+  try {
+    found = (starts.length ? starts.flatMap((w) => expand(w, state)) : ["."]).flatMap((s) => {
+      const start = s.replace(/(.)\/+$/, "$1");
+      return [...(/(^|\/)\.\.?$/.test(start) ? [] : [start]), `${start}/x`];
+    });
+  } catch (e) {
+    if (!(e instanceof Unresolved)) throw e;
+  }
+  const unread = starts.find((w) => one(w, state) === null && !choices(w, state));
+  const placeholder = (!found && unread) || [{ name: FOUND, op: "", quoted: true }];
+  const inner = copy(state);
+  const innerChild = copy(child);
+  inner.vars.set(FOUND, found);
+  innerChild.vars.set(FOUND, found);
+  for (let i = k; i < words.length; i++) {
+    if (!/^-(exec|execdir|ok|okdir)$/.test(strings[i])) continue;
+    let end = i + 1;
+    while (end < words.length && strings[end] !== ";" && !(strings[end] === "+" && strings[end - 1] === "{}")) end++;
+    const run = words.slice(i + 1, end).map((w) =>
+      w.flatMap((p) => ("text" in p && p.text.includes("{}") ? p.text.split("{}").flatMap((t, n) => [...(n ? placeholder : []), ...(t ? [{ text: t, quoted: p.quoted }] : [])]) : [p])),
+    );
+    if (run.length) checkRun(cmd, run, inner, innerChild);
+    i = end;
+  }
+}
 
 // The names the guard has checks for, so that a command word it can only partly read
 // (${X}git, g?t) is judged as each of them it could be.
@@ -1121,9 +1217,10 @@ function checkUnread(cmd, words, state, child) {
   staleAfter(state);
 }
 
-// The command string a shell's -c runs: its first operand after every option (-o and -O
-// take a value, -- and - end the options). undefined without -c, null when it's missing.
-function shellString(strings) {
+// The word holding the command string a shell's -c runs: its first operand after every
+// option (-o and -O take a value, -- and - end the options). undefined without -c, null
+// when it's missing.
+function shellString(words, strings) {
   let c = false;
   let k = 1;
   for (; k < strings.length; k++) {
@@ -1139,8 +1236,42 @@ function shellString(strings) {
     else if (!s.startsWith("--")) break;
   }
   if (!c) return undefined;
-  return k < strings.length ? strings[k] : null;
+  return words[k] ?? null;
 }
+
+// The word su's -c or --command string is, wherever it comes (su root -c '...'), like
+// shellString's.
+function suString(words, strings) {
+  for (let k = 1; k < strings.length; k++) {
+    const m = /^(?:-[a-zA-Z]*c|--(?:session-)?command)(?:=([\s\S]*))?$/.exec(strings[k]);
+    if (m) return m[1] !== undefined ? [{ text: m[1], quoted: true }] : (words[k + 1] ?? null);
+    if (strings[k] === "-s" || strings[k] === "--shell") k++;
+  }
+  return undefined;
+}
+
+// A command string handed to a shell (sh -c, su -c, flock -c, git rebase -x...) is checked
+// as each value it could have. One the guard can't read is asked about, and checked as
+// written too, since a refusal there still holds.
+function checkString(word, what, state, inherited) {
+  if (!word) deny(`can't find the command ${what} runs, so the guard can't check it. Write it as ${what} '<command>' and run it again.`);
+  let texts;
+  try {
+    texts = expand(word, state);
+  } catch (e) {
+    if (!(e instanceof Unresolved)) throw e;
+    ask(`${what} runs ${raw(word)}, a command the guard can't read`);
+    texts = [raw(word)];
+  }
+  for (const text of texts) checkLine(text, copy(inherited));
+}
+
+// The words a tool runs for you: one is a shell command, more are a program and its arguments.
+function checkRuns(words, what, state, inherited) {
+  if (words.length === 1) checkString(words[0], what, state, inherited);
+  else if (words.length) checkLine(argvLine(words, state), copy(inherited));
+}
+const argvLine = (words, state) => words.map((w) => (one(w, state) === null ? raw(w) : quote(one(w, state)))).join(" ");
 
 // A command's own checks, from its name on. child is what it runs with.
 function checkCommand(cmd, words, state, child) {
@@ -1194,6 +1325,7 @@ function checkCommand(cmd, words, state, child) {
   }
 
   if (name === "rm") checkRm(words, state);
+  if (name === "find") checkFind(cmd, words, state, child);
   // Whether the branch is still the one git reports, once this has run.
   let readOnly = checkGit(words, strings, state, child) || READ_ONLY.has(name);
   const [, sub, sub2] = strings;
@@ -1205,11 +1337,10 @@ function checkCommand(cmd, words, state, child) {
   if (name === "dd" && strings.some((w) => /^of=\/dev\//.test(w))) ask("dd to a device");
 
   // A command handed to another shell runs there: check it too, with what that shell inherits.
-  if (SHELLS.has(name)) {
+  if (SHELLS.has(name) || name === "su") {
     const inherited = { ...child, vars: new Map([...child.vars].filter(([k]) => child.exported.has(k))) };
-    const c = shellString(strings);
-    if (c === null) deny(`can't find the command ${name} -c runs, so the guard can't check it. Write it as ${name} -c '<command>' and run it again.`);
-    if (c !== undefined) checkLine(c, inherited);
+    const c = name === "su" ? suString(words, strings) : shellString(words, strings);
+    if (c !== undefined) checkString(c, `${name} -c`, state, inherited);
     else for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
     // What runs there was checked, and marked the branch unknown if it could change it.
     readOnly = c !== undefined || cmd.heredocs.length > 0;

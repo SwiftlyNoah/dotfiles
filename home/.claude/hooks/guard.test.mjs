@@ -303,6 +303,80 @@ cases("deny", [
 // /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
 cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
 
+// Every command runner the guard knows has the command it runs checked: watch, flock,
+// ionice, taskset, chronic, unbuffer, parallel and su, find's -exec, and the commands git
+// runs for rebase -x, submodule foreach and bisect run.
+cases("deny", [
+  'X=~/Documents; watch rm -rf "$X"',
+  'X=~/Documents; watch -n 1 "rm -rf $X"',
+  'X=~/Documents; flock /tmp/l rm -rf "$X"',
+  'X=~/Documents; flock -w 5 /tmp/l -c "rm -rf $X"',
+  'X=~/Documents; nohup nice -n 5 ionice rm -rf "$X"',
+  'X=~/Documents; ionice -c 3 rm -rf "$X"',
+  'X=~/Documents; taskset 0x1 rm -rf "$X"',
+  'X=~/Documents; taskset -c 0 rm -rf "$X"',
+  'X=~/Documents; chronic rm -rf "$X"',
+  'X=~/Documents; unbuffer rm -rf "$X"',
+  'X=~/Documents; parallel rm -rf ::: "$X"',
+  'X=~/Documents; su -c "rm -rf $X"',
+  'X=~/Documents; su root -c "rm -rf $X"',
+  'X=~/Documents; find . -exec rm -rf "$X" \\;',
+  'X=~/Documents; find /tmp -name x -execdir rm -rf "$X" +',
+  "find ~/Documents -maxdepth 0 -exec rm -rf {} \\;",
+  'find "$U" -exec rm -rf {} +',
+  'X=~; git rebase -x "rm -rf $X" HEAD~1',
+  'git submodule foreach "rm -rf $U"',
+  'X=~; git bisect run rm -rf "$X"',
+  "parallel rm -rf {} :::: dirs.txt",
+  "parallel rm -rf ::: /tmp/a ~/Documents",
+  "parallel ::: 'rm -rf ~/Documents'",
+]);
+cases("ask", [
+  "git rebase -x 'git push -f origin main' HEAD~1",
+  "git rebase --exec='git push -f origin main' HEAD~1",
+  "git rebase --exec 'git push -f origin main' HEAD~1",
+  "git rebase -i -x 'diskutil eraseDisk APFS x disk9' HEAD~1",
+  "git submodule foreach 'git push -f origin main'",
+  "git submodule --quiet foreach --recursive git push -f origin main",
+  "git bisect run git push -f origin main",
+  'git rebase -x "$X" HEAD~1',
+  'git submodule foreach "$X"',
+  "watch -n1 git push -f origin main",
+  "watch 'git push -f origin main'",
+  "flock /tmp/l git push -f origin main",
+  "flock /tmp/l -c 'git push -f origin main'",
+  "find . -exec git push -f origin main ';'",
+  "find . -execdir diskutil eraseDisk APFS x disk9 \\;",
+  "find . -name x -ok git push -f origin main \\;",
+  "ionice -c 3 git push -f origin main",
+  "taskset -c 0 git push -f origin main",
+  "chronic git push -f origin main",
+  "unbuffer git push -f origin main",
+  "parallel git push -f origin ::: main",
+  "parallel 'git push -f origin {}' ::: main",
+  "su -c 'git push -f origin main'",
+  "su root -c 'git push -f origin main'",
+  "su - root --command='git push -f origin main'",
+]);
+cases("pass", [
+  "find . -name '*.pyc' -exec rm -f {} +",
+  "find . -name node_modules -prune -exec rm -rf {} +",
+  "find /tmp/build -type d -empty -exec rmdir {} \\;",
+  "find . -type f -exec grep -l foo {} +",
+  "watch -n 5 git status",
+  "flock /tmp/l make",
+  "ionice -c 3 make",
+  "parallel gzip ::: a.log b.log",
+  "su -c 'echo hi'",
+  "git rebase -x 'npm test' HEAD~3",
+  "git submodule foreach git pull",
+  "git bisect run npm test",
+  "git rebase -i HEAD~3",
+]);
+test("find -exec rm -r from my home folder is refused, since it could match a folder in it", () => {
+  assert.equal(decision("find . -name node_modules -exec rm -rf {} +", { cwd: HOME }), "deny");
+});
+
 // A function's body is checked where it's defined, in either form.
 cases("ask", [
   "function f { git push -f origin main; }; f",
