@@ -161,6 +161,15 @@ cases("ask", [
 ]);
 cases("deny", ["time -p env -C ~ rm -rf Documents", "time -- rm -rf ~", "time { rm -rf ~; }"]);
 
+// Nesting past the guard's depth is refused, never let through unchecked.
+cases("deny", [
+  "eval eval eval eval eval eval eval eval git push --force origin main",
+  "eval eval eval eval eval eval eval eval echo hi",
+  "echo $(echo $(echo $(echo $(echo $(echo $(echo $(echo $(git push --force origin main))))))))",
+  "bash -c 'eval eval eval eval eval eval eval diskutil eraseDisk APFS x disk4'",
+]);
+cases("pass", ["eval eval echo hi", "echo $(echo $(echo hi))", "eval eval eval eval eval eval eval echo hi"]);
+
 // Pushes, judged in real repos: one on main, one on a feature branch, a folder outside any
 // repo, and a repo on main in a folder named push inside the feature one.
 describe("git push", () => {

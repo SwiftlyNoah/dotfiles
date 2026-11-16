@@ -738,7 +738,8 @@ function checkCommand(cmd, words, state, child) {
 }
 
 function checkLine(line, state) {
-  if (state.depth >= MAX_DEPTH) return;
+  // Past this depth the guard can no longer see what runs, so it refuses rather than let it through.
+  if (state.depth >= MAX_DEPTH) decide("deny", "the command nests eval, sh -c or $( ) too deeply for the guard to check. Write it out flat.");
   state = { ...state, depth: state.depth + 1 };
   const outer = [];
   for (const item of parse(line)) {
