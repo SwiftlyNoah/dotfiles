@@ -864,19 +864,33 @@ function checkGhApi(strings) {
   if (strings.includes("graphql") && strings.some((s) => /\b(deleteRef|updateRefs?)\b/.test(s))) decide("ask", "changing or deleting a branch through the GitHub API");
 }
 
-// git commands that never switch the branch a repo is on. git branch only lists, and git
-// symbolic-ref only reads, when given no branch to work on.
-const READ_ONLY_GIT = new Set(
-  "status log diff show add commit fetch push send-pack config rev-parse ls-files ls-remote grep blame describe shortlog cat-file ls-tree for-each-ref show-ref merge-base rev-list".split(" "),
+// git commands that never switch the branch a repo is on, and other commands that change
+// nothing git can see. git branch only lists, and git symbolic-ref only reads, when given no
+// branch to work on; checkout with -- only restores files; git stash branch and a rebase
+// given a branch, or finishing one, switch.
+const KEEPS_BRANCH = new Set(
+  "status log diff show add commit fetch push send-pack config rev-parse ls-files ls-remote grep blame describe shortlog cat-file ls-tree for-each-ref show-ref merge-base rev-list pull merge reset cherry-pick revert tag rm mv restore apply am clean stash".split(" "),
 );
 const READ_ONLY = new Set(["echo", "printf", "true", "false", ":", "test", "[", "[[", "ls", "cat", "pwd", "sleep", "date", "which", "type", "grep", "head", "tail", "wc", "sort", "uniq", "jq"]);
 
-function readOnlyGit(git) {
-  if (git.unread || git.command === null) return false;
+function keepsBranch(git) {
   const args = git.words.slice(git.at + 1).map((w) => single(w, git.state));
-  if (git.command === "branch") return args.every((a) => a.startsWith("-") && !/^(-[a-zA-Z]*[mMcC]|--(move|copy))/.test(a));
-  if (git.command === "symbolic-ref") return args.filter((a) => !a.startsWith("-")).length <= 1;
-  return READ_ONLY_GIT.has(git.command);
+  // The words that aren't options, nor the value of an option that takes one.
+  const operands = (valued = /(?!)/) => args.filter((a, k) => !a.startsWith("-") && !(k > 0 && valued.test(args[k - 1]))).length;
+  switch (git.command) {
+    case "branch":
+      return args.every((a) => a.startsWith("-") && !/^(-[a-zA-Z]*[mMcC]|--(move|copy))/.test(a));
+    case "symbolic-ref":
+      return operands() <= 1;
+    case "checkout":
+      return args.includes("--");
+    case "stash":
+      return args[0] !== "branch";
+    case "rebase":
+      return !args.some((a) => /^--(continue|skip|abort|quit|edit-todo)$/.test(a)) && operands(/^(--onto|-s|--strategy|-X|--strategy-option|-x|--exec)$/) <= 1;
+    default:
+      return KEEPS_BRANCH.has(git.command);
+  }
 }
 
 // Returns whether the command was a git command that leaves the branch alone.
@@ -890,7 +904,7 @@ function checkGit(words, strings, state, env) {
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
     decide("deny", "git remote --mirror makes every later push to that remote a force push of every branch, main included. Leave it out and run it again.");
   if (!GIT_BUILTINS.has(git.command)) checkAlias(git, env);
-  return readOnlyGit(git);
+  return keepsBranch(git);
 }
 
 function checkSimple(cmd, state) {

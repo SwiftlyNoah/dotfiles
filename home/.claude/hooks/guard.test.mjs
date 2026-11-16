@@ -603,6 +603,25 @@ describe("git push", () => {
       "sudo git switch main && git push --force",
       "while true; do git push --force; git checkout main; done",
       'for i in 1 2; do git push -f origin "$(git branch --show-current)"; git switch main; done',
+      "git rebase origin/main main && git push --force",
+      "git rebase --onto x origin/main main && git push --force",
+      "git rebase --continue && git push --force",
+      "git rebase --abort && git push --force",
+      "git stash branch main && git push --force",
+    ],
+    FEATURE,
+  );
+  // Commands that change files or history but never switch the branch.
+  at(
+    "pass",
+    [
+      "git rebase origin/main && git push --force-with-lease",
+      "git rebase --onto origin/main HEAD~2 && git push --force",
+      "git pull --rebase && git push --force",
+      "git stash && git stash pop && git push --force",
+      "git checkout -- file.txt && git push --force",
+      "git reset --hard HEAD~1 && git push --force",
+      "git merge origin/main && git tag v1 && git push --force",
     ],
     FEATURE,
   );
