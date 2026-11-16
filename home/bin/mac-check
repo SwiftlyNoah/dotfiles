@@ -50,14 +50,19 @@ lock_ok=$(( lock_after > 0 && lock_after <= MAX_LOCK_MINUTES ))
 [[ $lock == *immediate* ]] || lock_ok=0
 check "Screen lock" $lock_ok "display sleeps after ${lock_after} min idle, $password"
 
-# Automatic updates
-sw() { defaults read /Library/Preferences/com.apple.SoftwareUpdate "$1" 2>/dev/null || echo 0; }
-updates_ok=1
-for key in AutomaticCheckEnabled AutomaticDownload CriticalUpdateInstall AutomaticallyInstallMacOSUpdates; do
-  [[ $(sw $key) == 1 ]] || { updates_ok=0; missing_update=$key; }
+# Automatic updates. A key macOS leaves out holds its default: macOS drops
+# AutomaticCheckEnabled while checking is on (softwareupdate --schedule says so), and any
+# other missing key counts as off, since nothing shows that it defaults to on.
+typeset -a updates_off
+for key default in AutomaticCheckEnabled 1 AutomaticDownload 0 CriticalUpdateInstall 0 \
+  ConfigDataInstall 0 AutomaticallyInstallMacOSUpdates 0; do
+  [[ $(defaults read /Library/Preferences/com.apple.SoftwareUpdate $key 2>/dev/null || echo $default) == 1 ]] ||
+    updates_off+=($key)
 done
-check "Automatic updates" $updates_ok \
-  "$( (( updates_ok )) && echo "check, download, security responses and macOS installs on" || echo "$missing_update is off")"
+updates="check, download, security responses and macOS installs on"
+(( $#updates_off == 1 )) && updates="$updates_off is off"
+(( $#updates_off > 1 )) && updates="${(j:, :)updates_off} are off"
+check "Automatic updates" $(( ! $#updates_off )) $updates
 
 # Time Machine
 latest=$(tmutil latestbackup 2>/dev/null)
