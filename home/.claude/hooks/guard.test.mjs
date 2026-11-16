@@ -49,8 +49,8 @@ test("a refusal says how to fix the command", () => {
   assert.match(reason("rm -r $S/dist-owner"), /\$S isn't known.*Write the path out literally, or assign the variable/);
 });
 
-// Known paths at the top keep asking.
-cases("ask", [
+// Known paths at the top are refused outright (2026-11-16 incident): no session can approve them.
+cases("deny", [
   "rm -rf ~/Documents",
   "rm -rf ~",
   "rm -rf /",
@@ -92,10 +92,8 @@ cases("pass", [
   "cd /tmp && rm -rf build",
   "rm -rf build node_modules",
   "rm -rf ./dist",
-  "rm -f ~/Documents",
   "D=/tmp/x bash -c 'rm -rf $D'",
   "cat > script.sh <<'EOF'\nrm -rf \"$D\"\nEOF\nchmod +x script.sh",
-  "echo 'rm -rf ~' && echo \"rm -rf $HOME\"",
   "git push origin main",
   "git push --force origin feature",
 ]);
@@ -121,6 +119,24 @@ cases("ask", [
   "dd if=x.img of=/dev/disk4",
 ]);
 cases("deny", ["cat ~/.config/claude-pool/age-identity"]);
+
+// The 2026-11-16 incident and its relatives: refused even inside quotes, here-documents and backticks.
+cases("deny", [
+  'swarm report me-agent "s" <<EOF\nexample: `rm -rf ~`\nEOF',
+  'cat <<EOF\nnow $(date)\nEOF',
+  'echo "`rm -rf ~`"',
+  "echo 'rm -rf ~' && echo \"rm -rf $HOME\"",
+  'git commit -m "rm -rf ~/Library"',
+  "rm -f ~/Documents",
+  "find ~ -name x -delete",
+  "rm -rf /Users/x/../../",
+]);
+cases("pass", [
+  "cat <<'EOF'\nliteral `backticks` and $(subs)\nEOF",
+  "cat <<EOF\nplain $HOME text\nEOF",
+  "rm -rf ~/coding/claude-pool/build",
+  "rm -f ~/me/academics/notes.txt",
+]);
 
 test("mail sends and Drive shares still ask", () => {
   assert.equal(decision(null, { tool: "mcp__claude_ai_Gmail__send_message", input: {} }), "ask");

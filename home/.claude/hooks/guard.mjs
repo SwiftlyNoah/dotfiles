@@ -393,7 +393,7 @@ function checkRm(words, state) {
       if (!isAbsolute(prefix) && !state.cwd) unresolvedRm(raw(word), "the folder an earlier cd moved to");
       const path = resolve(state.cwd ?? "/", prefix || ".");
       if (glob ? atOrUnderTemp(prefix === "" || prefix.endsWith("/") ? path : dirname(path)) : underTemp(path)) continue;
-      if (top(path) || top(dirname(path))) decide("ask", `rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}`);
+      if (top(path) || top(dirname(path))) decide("deny", `rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}`);
     }
   }
 }
@@ -542,8 +542,31 @@ function checkLine(line, state) {
   }
 }
 
+// Hard refusals, read off the raw command text before any parsing, so they also catch text
+// inside here-documents, quotes and command substitutions (2026-11-16: an unquoted
+// here-document's backticks ran `rm -rf ~` and wiped most of the home folder). These are
+// "deny", never "ask": a skipped-permissions or auto-accepting session can't approve them.
+const HOME_RE = HOME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const ROOTISH = String.raw`(?:~|\$\{?HOME\}?|${HOME_RE}|/Users|/System|/Library|/Applications|/Volumes(?:/[^\s/'"\`;|&)]+)?|/private|/opt|/nix|/usr|/etc|/var)`;
+const CHILD = String.raw`(?:/+[^\s/'"\`;|&)]*)?`; // the root itself, or one level under it (~/me, ~/Library)
+const END = String.raw`/*\*?["']?(?=$|[\s;|&)\`"'])`;
+const RM_FLAGS = String.raw`\brm\b(?:\s+-[a-zA-Z-]*)*\s+-[a-zA-Z]*[rRf][a-zA-Z]*(?:\s+-[a-zA-Z-]*)*`;
+const RM_HARD = new RegExp(String.raw`${RM_FLAGS}[^\n;|&]*?(?:^|\s)["']?(?:/|${ROOTISH}${CHILD})${END}`);
+const FIND_DELETE = new RegExp(String.raw`\bfind\s+["']?(?:/|${ROOTISH}${CHILD})${END}[^\n;|&]*-delete\b`);
+function hardRefusals(command) {
+  if (RM_HARD.test(command))
+    decide("deny", "rm -r or rm -f on /, a system folder, my home folder or a folder directly in it is never run by an agent, in any form (also inside quotes, here-documents or backticks). Name the exact path inside a project or temp folder instead.");
+  if (FIND_DELETE.test(command)) decide("deny", "find -delete from /, my home folder or a folder directly in it is never run by an agent");
+  // An unquoted here-document expands `...` and $(...) in its body: refuse any body that holds them.
+  const re = /<<-?\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n([\s\S]*?)\n\s*\2\s*(?:\n|$)/g;
+  for (const m of command.matchAll(re))
+    if (!m[1] && /`|\$\(/.test(m[3]))
+      decide("deny", `this here-document (<<${m[2]}) is unquoted and its body holds backticks or $( ), which the shell would run. Quote the delimiter (<<'${m[2]}') or write the text to a file with the Write tool and pass the file.`);
+}
+
 function checkBash(command, cwd) {
   if (POOL_KEY.test(command)) decide("deny", "the claude-pool key is never read or copied");
+  hardRefusals(command);
   checkLine(command, { vars: new Map(), exported: new Set(), cwd, base: cwd, depth: 0 });
 }
 
