@@ -268,6 +268,7 @@ function lookup(name, op, state) {
 // git commands that print which branch a repo is on and change nothing. Agents push the
 // branch they're on with one of these, so the guard asks git the same thing.
 const BRANCH_QUERIES = new Set(["branch --show-current", "rev-parse --abbrev-ref HEAD", "symbolic-ref --short HEAD"]);
+const branches = new Map(); // what each query printed, by folder and query
 
 // What git [-C dir]... <a branch query> prints, or null when the guard can't tell.
 function branchQuery(args, state) {
@@ -276,12 +277,17 @@ function branchQuery(args, state) {
   let k = 0;
   for (; args[k] === "-C" && k + 1 < args.length; k += 2)
     dir = dir !== null || isAbsolute(args[k + 1]) ? resolve(dir ?? "/", args[k + 1]) : null;
-  if (dir === null || !BRANCH_QUERIES.has(args.slice(k).join(" "))) return null;
-  try {
-    return runGit(dir, args.slice(k)).replace(/\n+$/, "");
-  } catch {
-    return null;
+  const query = args.slice(k);
+  if (dir === null || !BRANCH_QUERIES.has(query.join(" "))) return null;
+  const key = `${dir}\0${query.join(" ")}`;
+  if (!branches.has(key)) {
+    try {
+      branches.set(key, runGit(dir, query).replace(/\n+$/, ""));
+    } catch {
+      branches.set(key, null);
+    }
   }
+  return branches.get(key);
 }
 
 // What $(inner) prints, where the guard can tell: mktemp, pwd and the branch a repo is on.
@@ -848,8 +854,11 @@ const late = () => refuse(`didn't finish within ${DEADLINE / 1000} s`);
 // Failing open is failing the way main did: a stack on stderr and exit status 1.
 function fail(e) {
   if (!closed) {
-    process.stderr.write(`${e?.stack ?? e}\n`);
-    process.exit(1);
+    try {
+      writeSync(2, `${e?.stack ?? e}\n`);
+    } finally {
+      process.exit(1);
+    }
   }
   if (e?.code === "ERR_SCRIPT_EXECUTION_TIMEOUT") late();
   refuse(`failed (${e?.message ?? e})`);
