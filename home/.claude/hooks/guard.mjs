@@ -14,13 +14,18 @@
 //     the config that decides where a push with no refspec goes, and aliases. A force push
 //     whose repo or branch the guard can't work out is refused, like an rm -r target below,
 //     and so is any config given to git, in its environment or written with git config,
-//     beyond a short safe list; a push that doesn't force but holds a word the guard can't
-//     read is asked about, since that word could force it)
+//     that could run a program or move a push; a push that doesn't force but holds a word
+//     the guard can't read is asked about, since that word could force it)
 //   - deleting a GitHub repo
 //   - rm -r on /, my home folder, or a folder directly in either (~/Documents, /Users)
 //   - erasing a disk (diskutil erase*, dd to a device)
+//   - running code the guard can't read: eval or sh -c of a string it can't work out, or a
+//     command word that could be any command
 //
-// Reading the claude-pool key is refused outright (see ~/.claude/CLAUDE.md).
+// A command a wrapper, a shell, find -exec or git runs for you (sudo, watch, sh -c, rebase
+// -x...) gets the same checks. A question never ends the checks: a refusal anywhere in the
+// line wins over it. Reading the claude-pool key is refused outright, in any spelling (see
+// ~/.claude/CLAUDE.md).
 //
 // rm -r is judged on the path it would really remove. Variables assigned earlier in the
 // same command line (D=..., export D=..., D=$(mktemp -d), for D in ...) are filled in, and
@@ -565,7 +570,7 @@ function checkRm(words, state) {
       // A glob could match anything in the folder it starts in: judge that folder.
       const prefix = value.split(/[*?[]/)[0];
       const glob = prefix !== value;
-      if (!isAbsolute(prefix) && !state.cwd) unresolvedRm(raw(word), "the folder an earlier cd moved to");
+      if (!isAbsolute(prefix) && !state.cwd) unresolvedRm(raw(word), "the folder it runs in (after a cd, env -C or the like)");
       const path = resolve(state.cwd ?? "/", prefix || ".");
       if (glob ? atOrUnderTemp(prefix === "" || prefix.endsWith("/") ? path : dirname(path)) : underTemp(path)) continue;
       if (top(path) || top(dirname(path))) deny(`rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}`);
