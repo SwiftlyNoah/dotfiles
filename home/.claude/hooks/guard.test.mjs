@@ -125,7 +125,10 @@ cases("deny", ["cat ~/.config/claude-pool/age-identity"]);
 // repo, and a repo on main in a folder named push inside the feature one.
 describe("git push", () => {
   const root = mkdtempSync(join(tmpdir(), "guard-push-"));
-  const git = (...args) => spawnSync("git", args, { encoding: "utf8" });
+  // Setup runs git without my own config, so no commit is signed and no hook runs.
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  const git = (...args) => spawnSync("git", args, { encoding: "utf8", env });
+  const COMMIT = ["-c", "user.name=guard", "-c", "user.email=guard@example.invalid", "commit", "-q", "--allow-empty", "-m", "start"];
   const MAIN = join(root, "main");
   const FEATURE = join(root, "feature");
   const OUTSIDE = join(root, "outside");
@@ -214,23 +217,62 @@ describe("git push", () => {
   at("ask", ["git -c push.default=simple push --force", "git -c push.default=current push --force"], MAIN);
 
   // A word whose value the guard can't work out could be push, --force or +main, and an
-  // unquoted one could split or vanish and move every word after it.
+  // unquoted one could split or vanish and move every word after it. In a push that forces
+  // or deletes it's refused; in one that doesn't, the guard asks.
   at(
     "deny",
     [
-      "git push origin $(echo +main)",
-      'git push origin "$(echo +main)"',
-      "git push $(echo --force) origin main",
       "git $(echo push) --force origin main",
-      'X="push --force"; git $X origin main',
       "X=; git -C push $X push --force",
       "X=; git --git-dir $X status push --force origin main",
       "git -C $(echo push) push --force origin feature",
       "git push --force origin pus*",
+      'git push --force origin "$BRANCH"',
+      "git push --force-with-lease origin $BRANCH",
+      'git push origin --delete "$BRANCH"',
+      'git push -f origin "$(cat branch.txt)"',
+      'git push origin ":$BRANCH"',
+      'git push origin "+$BRANCH"',
     ],
     FEATURE,
   );
-  at("pass", ['git -C "$(echo push)" status', "git push origin feature", "D=push; git -C $D status"], FEATURE);
+  at(
+    "ask",
+    [
+      "git push origin $(echo +main)",
+      'git push origin "$(echo +main)"',
+      "git push $(echo --force) origin main",
+      'X="push --force"; git $X origin main',
+      "git $(echo push) origin main",
+      'git push origin "$BRANCH"',
+      'git push -u origin "$(cat branch.txt)"',
+      "for b in $(git branch --format='%(refname:short)'); do git push origin $b; done",
+      "git -C $X status",
+    ],
+    FEATURE,
+  );
+  at("pass", ['git -C "$(echo push)" status', "git push origin feature", "D=push; git -C $D status", 'git commit -m "$(cat msg.txt)"'], FEATURE);
+
+  // The branch a repo is on, from git itself, is worked out the way the shell would: agents
+  // push the branch they're on this way all the time. A branch can be named +main, which
+  // makes the push a forced one.
+  git("-C", MAIN, ...COMMIT);
+  git("-C", FEATURE, ...COMMIT);
+  const PLUS = join(root, "plus");
+  git("init", "-q", "-b", "+main", PLUS);
+  const pushHere = [
+    'git push -u origin "$(git rev-parse --abbrev-ref HEAD)"',
+    "git push -u origin $(git branch --show-current)",
+    'B=$(git symbolic-ref --short HEAD); git push origin "$B"',
+  ];
+  at("pass", [...pushHere, 'git push --force origin "$(git rev-parse --abbrev-ref HEAD)"', 'git -C push push -u origin "$(git branch --show-current)"'], FEATURE);
+  at("pass", pushHere, MAIN);
+  at("ask", ['git push --force origin "$(git rev-parse --abbrev-ref HEAD)"', "git push -f origin $(git -C . branch --show-current)"], MAIN);
+  at("ask", ['git push -u origin "$(git branch --show-current)"', 'git push origin "$(git symbolic-ref --short HEAD)"'], PLUS);
+  at("ask", [`B=$(git -C ${MAIN} branch --show-current); git push --force origin $B`]);
+  at("pass", [`B=$(git -C ${FEATURE} branch --show-current); git push --force origin $B`]);
+  at("ask", ['git push -u origin "$(git branch --show-current)"']);
+  at("deny", ['git push --force origin "$(git branch --show-current)"']);
 
   // A force push with no branch named, or to HEAD, goes to the branch its repo is on, so the
   // guard asks git. When it can't tell which repo that is, or git can't answer, it refuses:
@@ -264,7 +306,6 @@ describe("git push", () => {
     `env GIT_WORK_TREE=${MAIN} git push --force`,
     `git --git-dir=${MAIN}/.git push --force`,
     `git --work-tree ${MAIN} push --force`,
-    `B=$(git -C ${MAIN} branch --show-current); git push --force origin $B`,
     "git push --force",
   ]);
 
@@ -283,7 +324,8 @@ describe("git push", () => {
   });
 
   test("a git refusal says how to fix the command", () => {
-    assert.match(reason("git push origin $(echo +main)", FEATURE), /can't tell what git does with \$\(echo \+main\).*Write it out literally/);
+    assert.match(reason("git push --force origin $(echo +main)", FEATURE), /can't tell what git does with \$\(echo \+main\).*Write it out literally/);
+    assert.match(reason('git push origin "$BRANCH"', FEATURE), /git push with \$BRANCH, which the guard can't read/);
     assert.match(reason("X=; git -C push $X push --force", FEATURE), /could split into several words, vanish or match files.*Quote it \("\$X"\)/);
     assert.match(reason("git -c remote.origin.push=+HEAD:main push", FEATURE), /git -c remote\.origin\.push=\+HEAD:main can change .* Leave it out/);
   });

@@ -8,10 +8,12 @@
 //   - sending, replying to or forwarding mail, and trashing mail, events or Drive files
 //   - sharing a Google Drive file
 //   - a force push to main or master, or deleting either (including a push with no branch
-//     named, from main; git's arguments are read the way git reads them; a force push whose
+//     named, from main; git's arguments are read the way git reads them, and the branch a
+//     repo is on, as in "$(git branch --show-current)", is asked of git; a force push whose
 //     repo or branch the guard can't work out is refused, like an rm -r target below, and
 //     so is git config on the command line or in git's environment that could redirect a
-//     push or define an alias)
+//     push or define an alias; a push that doesn't force but holds a word the guard can't
+//     read is asked about, since that word could force it)
 //   - deleting a GitHub repo
 //   - rm -r on /, my home folder, or a folder directly in either (~/Documents, /Users)
 //   - erasing a disk (diskutil erase*, dd to a device)
@@ -258,7 +260,26 @@ function lookup(name, op, state) {
   throw new Unresolved(`$${name}`);
 }
 
-// What $(inner) prints, where the guard can tell: mktemp and pwd.
+// git commands that print which branch a repo is on and change nothing. Agents push the
+// branch they're on with one of these, so the guard asks git the same thing.
+const BRANCH_QUERIES = new Set(["branch --show-current", "rev-parse --abbrev-ref HEAD", "symbolic-ref --short HEAD"]);
+
+// What git [-C dir]... <a branch query> prints, or null when the guard can't tell.
+function branchQuery(args, state) {
+  if (state.exported.has("GIT_DIR") || state.exported.has("GIT_WORK_TREE")) return null;
+  let dir = state.cwd;
+  let k = 0;
+  for (; args[k] === "-C" && k + 1 < args.length; k += 2)
+    dir = dir !== null || isAbsolute(args[k + 1]) ? resolve(dir ?? "/", args[k + 1]) : null;
+  if (dir === null || !BRANCH_QUERIES.has(args.slice(k).join(" "))) return null;
+  try {
+    return runGit(dir, args.slice(k)).replace(/\n+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+// What $(inner) prints, where the guard can tell: mktemp, pwd and the branch a repo is on.
 function substitute(inner, state) {
   const what = inner === null ? "$((...))" : `$(${inner.trim()})`;
   const items = inner === null ? [] : parse(inner);
@@ -271,6 +292,8 @@ function substitute(inner, state) {
   if (name === "pwd" && state.cwd) return [state.cwd];
   const path = name === "mktemp" ? mktemp(args, state.cwd) : null;
   if (path) return [path];
+  const branch = basename(name) === "git" ? branchQuery(args, state) : null;
+  if (branch !== null) return [branch];
   throw new Unresolved(what);
 }
 
@@ -428,14 +451,15 @@ const unknownGit = (what, fix) =>
   decide("deny", `can't tell ${what}, so it could be a force push to main or master. ${fix} and run it again.`);
 const unknownPush = (what) => unknownGit(what, "Name the branch literally (git push --force origin <branch>)");
 
-// The argument git gets from words[k]. It has to be one argument, since one that splits or
-// vanishes moves every word after it, and known unless only its place matters.
-function gitArg(words, k, state, known = true) {
-  const word = raw(words[k]);
-  const value = one(words[k], state);
-  if (value === null && known) unknownGit(`what git does with ${word}`, "Write it out literally");
-  if (!oneArg(words[k], state))
-    unknownGit(`what git gets from ${word}, which could split into several words, vanish or match files`, `Quote it ("${word}")`);
+// The argument git gets from git.words[k], or null when the guard can't work it out. The
+// first word that isn't sure to be one known argument is kept in git.unread: one that
+// splits or vanishes moves every word after it, and an unknown one could be push, --force
+// or +main. known = false accepts an unknown value whose place is all that matters.
+function gitArg(git, k, known = true) {
+  const word = git.words[k];
+  const value = one(word, git.state);
+  if (value === null && known) git.unread ??= { word: raw(word), split: false };
+  else if (!oneArg(word, git.state)) git.unread ??= { word: raw(word), split: true };
   return value;
 }
 
@@ -458,42 +482,53 @@ function checkConfig(option, value) {
 
 // git [options] <command> [args], read the way git reads it: its own options as
 // { name, value } (value null when the guard can't work it out), and the command and its
-// index. null when there's no command. env is what git runs with.
+// index (command null when there's none, or when git.unread stopped the reading before
+// it). env is what git runs with.
 function gitCommand(words, state, env) {
   const config = [...env.exported].find((name) => name.startsWith("GIT_CONFIG"));
   if (config)
     decide("deny", `${config} in git's environment can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
-  const options = [];
+  const git = { words, state, options: [], command: null, at: words.length, unread: null };
+  const stop = (at, command = null) => Object.assign(git, { at, command });
   for (let k = 1; k < words.length; k++) {
-    const arg = gitArg(words, k, state);
-    if (!arg.startsWith("-")) return { options, command: arg, at: k };
+    const arg = gitArg(git, k);
+    if (git.unread) return stop(k);
+    if (!arg.startsWith("-")) return stop(k, arg);
     const eq = arg.startsWith("--") ? arg.indexOf("=") : -1;
     const name = eq === -1 ? arg : arg.slice(0, eq);
     if (!GIT_VALUES.includes(name)) continue;
-    if (eq === -1 && ++k === words.length) return null;
-    const value = eq === -1 ? gitArg(words, k, state, false) : arg.slice(eq + 1);
+    if (eq === -1 && ++k === words.length) break;
+    const value = eq === -1 ? gitArg(git, k, false) : arg.slice(eq + 1);
+    if (git.unread) return stop(k);
     if (name === "-c" || name === "--config-env") checkConfig(name, value);
-    options.push({ name, value });
+    git.options.push({ name, value });
   }
-  return null;
+  return git;
+}
+
+// What git prints for args in the repo at dir. Throws, saying why, when git fails or
+// doesn't answer in time.
+function runGit(dir, args) {
+  try {
+    return execFileSync("git", ["-C", dir, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: GIT_TIMEOUT_MS,
+      killSignal: "SIGKILL",
+    });
+  } catch (e) {
+    const why = e.code ?? (e.signal ? `killed by ${e.signal}` : `exit ${e.status}`);
+    throw new Error(e.code === "ETIMEDOUT" ? `git didn't say within ${GIT_TIMEOUT_MS / 1000} s` : `git couldn't say: ${why}`);
+  }
 }
 
 // Which branch the repo at dir is on. Any failure refuses the call: an answer read as
 // "not main" would let a force push to main through.
 function currentBranch(dir) {
   try {
-    return execFileSync("git", ["-C", dir, "branch", "--show-current"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: GIT_TIMEOUT_MS,
-      killSignal: "SIGKILL",
-    }).trim();
+    return runGit(dir, ["branch", "--show-current"]).trim();
   } catch (e) {
-    unknownPush(
-      e.code === "ETIMEDOUT"
-        ? `which branch ${dir} is on (git didn't say within ${GIT_TIMEOUT_MS / 1000} s)`
-        : `which branch ${dir} is on (git couldn't say: ${e.code ?? (e.signal ? `killed by ${e.signal}` : `exit ${e.status}`)})`,
-    );
+    unknownPush(`which branch ${dir} is on (${e.message})`);
   }
 }
 
@@ -519,14 +554,18 @@ const PUSH_EVERY = ["all", "branches", "mirror"];
 const prefixOf = (name) => (option) => option.startsWith(name);
 
 // git push [options] [remote [refspec...]], with options anywhere until "--". Deleting a
-// branch counts as forcing it, and so does --mirror.
-function checkGitPush(words, { options, at }, state, env) {
+// branch counts as forcing it, and so does --mirror. A push with a word the guard can't
+// read is refused when it forces and asked about when it doesn't, since the word itself
+// could force it.
+function checkGitPush(git, env) {
+  const { words, state } = git;
   let forced = false;
   let every = false;
   let ended = false;
   const operands = [];
-  for (let k = at + 1; k < words.length; k++) {
-    const arg = gitArg(words, k, state);
+  for (let k = git.at + 1; k < words.length; k++) {
+    // A word the guard can't read is judged as written, so "+$B" still forces.
+    const arg = gitArg(git, k) ?? raw(words[k]);
     if (ended || arg === "-" || !arg.startsWith("-")) operands.push(arg);
     else if (arg === "--") ended = true;
     else if (arg.startsWith("--")) {
@@ -534,23 +573,30 @@ function checkGitPush(words, { options, at }, state, env) {
       if (name.startsWith("no-")) continue;
       forced ||= name.startsWith("force") || PUSH_FORCE.some(prefixOf(name));
       every ||= PUSH_EVERY.some(prefixOf(name));
-      if (!arg.includes("=") && PUSH_VALUES.some(prefixOf(name)) && ++k < words.length) gitArg(words, k, state, false);
+      if (!arg.includes("=") && PUSH_VALUES.some(prefixOf(name)) && ++k < words.length) gitArg(git, k, false);
     } else {
       // -fu, -d, -o value or -ovalue: what follows o in a cluster is its value.
       const o = arg.indexOf("o");
       forced ||= /[fd]/.test(o === -1 ? arg : arg.slice(0, o));
-      if (o === arg.length - 1 && ++k < words.length) gitArg(words, k, state, false);
+      if (o === arg.length - 1 && ++k < words.length) gitArg(git, k, false);
     }
   }
   const refspecs = operands.slice(1).map((r) => r.replace(/^\+/, ""));
   forced ||= operands.some((r) => r.startsWith("+")) || refspecs.some((r) => r.startsWith(":"));
+  if (git.unread) {
+    const { word, split } = git.unread;
+    if (!forced)
+      decide("ask", `${git.command ? "git push" : "git"} with ${word}, which the guard can't read, so it could be a force push to main or master`);
+    if (split) unknownGit(`what git gets from ${word}, which could split into several words, vanish or match files`, `Quote it ("${word}")`);
+    unknownGit(`what git does with ${word}`, "Write it out literally");
+  }
   if (!forced) return;
   if (every || refspecs.includes(":")) decide("ask", "force push of every branch, main included");
 
   // Where each refspec lands. Without one, or with HEAD, that's the branch the repo is on.
   const targets = refspecs.map((r) => r.split(":").at(-1));
   if (!targets.length || targets.some((t) => t === "HEAD" || t === "@")) {
-    const dir = gitFolder(options, state, env);
+    const dir = gitFolder(git.options, state, env);
     if (dir === null) unknownPush("which repo this force push runs in");
     targets.push(currentBranch(dir));
   }
@@ -561,8 +607,9 @@ function checkGitPush(words, { options, at }, state, env) {
 
 function checkGit(words, strings, state, env) {
   if (basename(strings[0]) !== "git") return;
-  const command = gitCommand(words, state, env);
-  if (command?.command === "push") checkGitPush(words, command, state, env);
+  const git = gitCommand(words, state, env);
+  // A word the guard can't read before the command could be the push itself.
+  if (git.command === "push" || git.unread) checkGitPush(git, env);
 }
 
 function checkSimple(cmd, state) {
