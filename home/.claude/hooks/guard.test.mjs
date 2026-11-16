@@ -487,6 +487,62 @@ describe("git push", () => {
     FEATURE,
   );
 
+  // Everyday config that can't run a program or send a push elsewhere passes too: agents set
+  // pull.rebase after git pull's divergent-branches hint, and trace git when it misbehaves.
+  at(
+    "pass",
+    [
+      "git config pull.rebase false",
+      "git -c pull.rebase=false pull",
+      "git config pull.ff only",
+      "git config core.autocrlf false",
+      "git config core.fileMode false",
+      "git config core.ignorecase true",
+      "git config --global --add safe.directory /x",
+      "git -c safe.directory='*' status",
+      "git -c protocol.file.allow=always submodule update --init",
+      "git config push.autoSetupRemote true",
+      "git config rebase.autoStash true",
+      "git config rebase.autosquash true",
+      "git config merge.conflictStyle zdiff3",
+      "git config diff.noprefix true",
+      "git config diff.algorithm histogram",
+      "git config fetch.prune true",
+      "git config init.defaultBranch main",
+      "git config gc.auto 0",
+      "git config log.date iso",
+      "git -c core.hooksPath=/dev/null commit -m x",
+      "GIT_TRACE=1 git status",
+      "GIT_TRACE2_EVENT=/tmp/t.json git status",
+      "GIT_CURL_VERBOSE=1 git fetch",
+    ],
+    FEATURE,
+  );
+  // Keys that name a program, a file of config, or where git fetches and pushes stay refused.
+  at(
+    "deny",
+    [
+      "git config diff.external 'git push --force origin main'",
+      "git config diff.x.command x",
+      "git config diff.x.textconv x",
+      "git config filter.x.clean x",
+      "git config credential.helper x",
+      "git config gpg.program x",
+      "git config core.sshCommand x",
+      "git config core.fsmonitor x",
+      "git config merge.x.driver x",
+      "git config init.templateDir /tmp/t",
+      "git config url.x.insteadOf origin",
+      "git config remote.origin.url /tmp/x",
+      "git -c protocol.ext.allow=always fetch 'ext::sh -c x'",
+      "git -c protocol.allow=always fetch",
+      "git -c core.hooksPath=/tmp/hooks commit -m x",
+      "git -c sequence.editor=x rebase -i HEAD~2",
+      "GIT_EXTERNAL_DIFF=x git diff",
+    ],
+    FEATURE,
+  );
+
   // A word whose value the guard can't work out could be push, --force or +main, and an
   // unquoted one could split or vanish and move every word after it. In a push that forces
   // or deletes it's refused; in one that doesn't, the guard asks.
@@ -523,6 +579,11 @@ describe("git push", () => {
     FEATURE,
   );
   at("pass", ['git -C "$(echo push)" status', "git push origin feature", "D=push; git -C $D status", 'git commit -m "$(cat msg.txt)"'], FEATURE);
+
+  // A word with several known values is judged as each of them.
+  at("pass", ['for b in a b; do git push origin "$b"; done', "for b in a b; do git push origin $b; done", 'for b in a b; do git push -f origin "$b"; done'], FEATURE);
+  at("ask", ['for b in a main; do git push -f origin "$b"; done', 'for b in a +main; do git push origin "$b"; done', 'for f in -u -f; do git push $f origin main; done'], FEATURE);
+  at("deny", ['for b in a "x y"; do git push -f origin $b; done'], FEATURE);
 
   // The branch a repo is on, from git itself, is worked out the way the shell would: agents
   // push the branch they're on this way all the time. A branch can be named +main, which
@@ -705,7 +766,7 @@ describe("git push", () => {
     assert.match(reason("git push --force origin $(echo +main)", FEATURE), /can't tell what git does with \$\(echo \+main\).*Write it out literally/);
     assert.match(reason('git push origin "$BRANCH"', FEATURE), /git push with \$BRANCH, which the guard can't read/);
     assert.match(reason("X=; git -C push $X push --force", FEATURE), /could split into several words, vanish or match files.*Quote it \("\$X"\)/);
-    assert.match(reason("git -c remote.origin.push=+HEAD:main push", FEATURE), /git -c remote\.origin\.push=\+HEAD:main can change .* Leave it out/);
+    assert.match(reason("git -c remote.origin.push=+HEAD:main push", FEATURE), /git -c remote\.origin\.push=\+HEAD:main isn't on the guard's list of config .* Leave it out/);
   });
 });
 

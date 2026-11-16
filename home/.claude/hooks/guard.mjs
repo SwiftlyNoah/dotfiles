@@ -559,6 +559,21 @@ function one(word, state) {
   }
 }
 
+// Every value a word could take, when whichever it takes is sure to be exactly one argument;
+// else null.
+function choices(word, state) {
+  if (braced(word) || word.some((p) => !p.quoted && "text" in p && /[*?[]/.test(p.text))) return null;
+  let values;
+  try {
+    values = expand(word, state);
+  } catch (e) {
+    if (e instanceof Unresolved) return null;
+    throw e;
+  }
+  const loose = word.some((p) => !p.quoted && !("text" in p));
+  return loose && values.some((v) => !/\S/.test(v) || /[\s*?[]/.test(v)) ? null : values;
+}
+
 // Whether a word is sure to reach the command as exactly one argument: nothing unquoted in
 // it can split into several, vanish or match files.
 function oneArg(word, state) {
@@ -591,17 +606,43 @@ function gitArg(git, k, known = true) {
 const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source", "--shallow-file"];
 
 const redirects = (what) =>
-  deny(`${what} can change what git runs or where it pushes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
+  deny(`${what} isn't on the guard's list of config that can't run a program or change where a push goes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
 
 // Config that can't run a program or change where a push goes, and so is safe to give git
 // on the command line or to write with git config: everything else is refused (a pager, an
-// ssh command, fsmonitor, hooks, an alias, an include, a remote's push refspec). push.default
-// may be current or simple, which push the branch the repo is on, and a pager or editor one
-// of a few programs that do nothing else. value is undefined when the guard can't see it.
+// ssh command, a diff or merge driver, a filter, a credential helper, fsmonitor, hooks, an
+// alias, an include, a url rewrite, a remote, the ext:: transport). push.default may be
+// current or simple, which push the branch the repo is on, a pager or editor one of a few
+// programs that do nothing else, and hooks only /dev/null, which turns them off. value is
+// undefined when the guard can't see it.
 const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less"]);
+const SAFE_KEYS = new RegExp(
+  `^(${[
+    String.raw`user\.[^.]+`,
+    String.raw`color\..+`,
+    String.raw`advice\.[^.]+`,
+    String.raw`(commit|tag)\.gpgsign`,
+    String.raw`init\.defaultbranch`,
+    String.raw`core\.(quotepath|autocrlf|safecrlf|eol|filemode|ignorecase|precomposeunicode|symlinks|whitespace|abbrev|untrackedcache|preloadindex|longpaths|commentchar|commentstring)`,
+    String.raw`safe\.directory`,
+    String.raw`protocol\.(file|git|http|https|ssh)\.allow`,
+    String.raw`pull\.(rebase|ff)`,
+    String.raw`push\.(autosetupremote|followtags)`,
+    String.raw`rebase\.(autostash|autosquash|stat|missingcommitscheck|abbreviatecommands)`,
+    String.raw`merge\.(conflictstyle|ff|log|stat|renames|autostash|verbosity)`,
+    String.raw`diff\.(noprefix|mnemonicprefix|renames|renamelimit|algorithm|colormoved|colormovedws|context|interhunkcontext|indentheuristic|relative|statgraphwidth|submodule|ignoresubmodules|suppressblankempty|wserrorhighlight)`,
+    String.raw`fetch\.(prune|prunetags|parallel|writecommitgraph)`,
+    String.raw`gc\.(auto|autodetach|autopacklimit)`,
+    String.raw`log\.[^.]+`,
+    String.raw`status\.[^.]+`,
+    String.raw`branch\.(autosetupmerge|autosetuprebase|sort)`,
+  ].join("|")})$`,
+  "i",
+);
 function safeConfig(key, value) {
-  if (/^(user\.[^.]+|color\..+|advice\.[^.]+|core\.quotepath|commit\.gpgsign|tag\.gpgsign|init\.defaultbranch)$/i.test(key)) return true;
+  if (SAFE_KEYS.test(key)) return true;
   if (/^push\.default$/i.test(key)) return ["current", "simple"].includes(value);
+  if (/^core\.hookspath$/i.test(key)) return value === "/dev/null";
   if (/^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i.test(key)) return SAFE_PROGRAMS.has(value);
   return false;
 }
@@ -616,7 +657,9 @@ function checkConfig(option, value) {
 // What git's environment may hold from this line: GIT_ variables that can't run a program
 // or choose a config file (GIT_DIR and GIT_WORK_TREE make the repo unknown instead), a
 // pager or editor from the safe few, and HOME and XDG_CONFIG_HOME only as they already are.
-const SAFE_GIT_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|FLUSH|PROGRESS_DELAY|ADVICE)$/;
+// GIT_TRACE and its kin write what git does to stderr or a file.
+const SAFE_GIT_ENV =
+  /^GIT_(DIR|WORK_TREE|INDEX_FILE|(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|FLUSH|PROGRESS_DELAY|ADVICE|TRACE\w*|CURL_VERBOSE|REDACT_COOKIES|MERGE_VERBOSITY)$/;
 function checkGitEnv(env) {
   for (const name of env.exported) {
     if (!env.vars.has(name)) continue; // exported as it already was
@@ -729,6 +772,14 @@ const prefixOf = (name) => (option) => option.startsWith(name);
 // branch both sides have, and --stdin reads the refs from a place the guard can't see.
 function checkGitPush(git, env) {
   const { words, state } = git;
+  // A word with several known values, each sure to be one argument (for b in a b; do git
+  // push origin "$b"), is judged as each of them, unless that makes too many pushes.
+  const several = words.map((w, k) => (k > git.at && one(w, state) === null ? choices(w, state) : null));
+  const k = several.findIndex((values) => values?.length > 1);
+  if (k !== -1 && several.reduce((n, values) => n * (values?.length || 1), 1) <= MAX_VALUES) {
+    for (const value of several[k]) checkGitPush({ ...git, words: words.with(k, [{ text: value, quoted: true }]) }, env);
+    return;
+  }
   let forced = false;
   let every = false;
   let pruned = false;
