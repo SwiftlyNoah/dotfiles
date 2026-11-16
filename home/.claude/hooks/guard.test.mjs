@@ -303,6 +303,20 @@ cases("deny", [
 // /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
 cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
 
+// git's own programs in git-core (git-push, git-send-pack...) are read as git with that command.
+cases("ask", [
+  "/nix/store/x-git-2.54.0/libexec/git-core/git-push --force origin main",
+  '"$(git --exec-path)/git-push" --force origin main',
+  "$(git --exec-path)/git-push --force origin main",
+  "git-push -f origin main",
+  "git-push origin :main",
+  "/usr/libexec/git-core/git-send-pack --force origin main",
+  "git-http-push --force https://example.invalid/r.git main",
+  "git http-push --force https://example.invalid/r.git main",
+]);
+cases("deny", ['git-push --force origin "$B"', "git-config remote.origin.push +HEAD:refs/heads/main", 'cd "$U"; git-push -f']);
+cases("pass", ["git-push origin feature", "git-lfs push origin main", "git-receive-pack x"]);
+
 // An ask never ends the checks: a refusal anywhere later in the line still wins, so
 // approving the question can't run what the guard refuses.
 cases("deny", [

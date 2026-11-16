@@ -760,6 +760,7 @@ function gitFolder(options, state, env) {
 // git push's long options that take a value (the next word, or after "="), that force or
 // delete, and that push every branch. git takes any prefix of one that names only it.
 // --prune deletes every remote branch with no local one; with no refspec that's any branch.
+const PUSHES = new Set(["push", "send-pack", "http-push"]);
 const PUSH_VALUES = ["repo", "receive-pack", "exec", "recurse-submodules", "push-option"];
 const PUSH_FORCE = ["force", "force-with-lease", "force-if-includes", "mirror", "delete", "prune"];
 const PUSH_EVERY = ["all", "branches", "mirror"];
@@ -768,8 +769,9 @@ const prefixOf = (name) => (option) => option.startsWith(name);
 // git push [options] [remote [refspec...]], with options anywhere until "--". Deleting a
 // branch counts as forcing it, and so does --mirror. A push with a word the guard can't
 // read is refused when it forces and asked about when it doesn't, since the word itself
-// could force it. git send-pack is read the same way: with no ref named it pushes every
-// branch both sides have, and --stdin reads the refs from a place the guard can't see.
+// could force it. git send-pack and git http-push are read the same way: with no ref named
+// they push every branch both sides have, and send-pack's --stdin reads the refs from a
+// place the guard can't see.
 function checkGitPush(git, env) {
   const { words, state } = git;
   // A word with several known values, each sure to be one argument (for b in a b; do git
@@ -807,7 +809,7 @@ function checkGitPush(git, env) {
   }
   const refspecs = operands.slice(1).map((r) => r.replace(/^\+/, ""));
   forced ||= operands.some((r) => r.startsWith("+")) || refspecs.some((r) => r.startsWith(":"));
-  every ||= !refspecs.length && (pruned || git.command === "send-pack");
+  every ||= !refspecs.length && (pruned || git.command !== "push");
   if (git.unread) {
     const { word, split } = git.unread;
     if (!forced)
@@ -882,7 +884,7 @@ function checkGitConfig(git) {
 
 // git's own commands. Any other is an alias, or a git-<name> program on PATH.
 const GIT_BUILTINS = new Set(
-  "add am annotate apply archive bisect blame branch bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout cherry cherry-pick clean clone commit config count-objects describe diff difftool fetch for-each-ref format-patch fsck gc grep help init log ls-files ls-remote ls-tree merge merge-base mv notes pull push range-diff rebase reflog remote repack replace reset restore rev-list rev-parse revert rm send-pack shortlog show show-ref sparse-checkout stash status submodule switch symbolic-ref tag update-ref version worktree".split(" "),
+  "add am annotate apply archive bisect blame branch bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout cherry cherry-pick clean clone commit config count-objects describe diff difftool fetch for-each-ref format-patch fsck gc grep help http-push init log ls-files ls-remote ls-tree merge merge-base mv notes pull push range-diff rebase reflog remote repack replace reset restore rev-list rev-parse revert rm send-pack shortlog show show-ref sparse-checkout stash status submodule switch symbolic-ref tag update-ref version worktree".split(" "),
 );
 const quote = (s) => `'${s.replaceAll("'", String.raw`'\''`)}'`;
 
@@ -925,7 +927,7 @@ function checkGhApi(strings) {
 // branch to work on; checkout with -- only restores files; git stash branch and a rebase
 // given a branch, or finishing one, switch.
 const KEEPS_BRANCH = new Set(
-  "status log diff show add commit fetch push send-pack config rev-parse ls-files ls-remote grep blame describe shortlog cat-file ls-tree for-each-ref show-ref merge-base rev-list pull merge reset cherry-pick revert tag rm mv restore apply am clean stash".split(" "),
+  "status log diff show add commit fetch push send-pack http-push config rev-parse ls-files ls-remote grep blame describe shortlog cat-file ls-tree for-each-ref show-ref merge-base rev-list pull merge reset cherry-pick revert tag rm mv restore apply am clean stash".split(" "),
 );
 const READ_ONLY = new Set(["echo", "printf", "true", "false", ":", "test", "[", "[[", "ls", "cat", "pwd", "sleep", "date", "which", "type", "grep", "head", "tail", "wc", "sort", "uniq", "jq"]);
 
@@ -951,10 +953,15 @@ function keepsBranch(git) {
 
 // Returns whether the command was a git command that leaves the branch alone.
 function checkGit(words, strings, state, env) {
-  if (basename(strings[0]) !== "git") return false;
+  // git-core's git-push and the rest are git with that command.
+  const own = /^git-(.+)$/.exec(basename(strings[0]))?.[1];
+  if (GIT_BUILTINS.has(own)) {
+    words = [[{ text: "git", quoted: true }], [{ text: own, quoted: true }], ...words.slice(1)];
+    strings = ["git", own, ...strings.slice(1)];
+  } else if (basename(strings[0]) !== "git") return false;
   const git = gitCommand(words, state, env);
   // A word the guard can't read before the command could be the push itself.
-  if (git.command === "push" || git.command === "send-pack" || git.unread) checkGitPush(git, env);
+  if (PUSHES.has(git.command) || git.unread) checkGitPush(git, env);
   if (git.unread || git.command === null) return false;
   if (git.command === "config") checkGitConfig(git);
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
