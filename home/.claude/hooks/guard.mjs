@@ -1178,39 +1178,72 @@ function checkFind(cmd, words, state, child) {
 }
 
 // The names the guard has checks for, so that a command word it can only partly read
-// (${X}git, g?t) is judged as each of them it could be.
-const CHECKED = () => ["git", "gh", "rm", "diskutil", "dd", "eval", ...SHELLS, ...WRAPPERS.keys()];
-function globMatches(pattern, name) {
-  const source = pattern.replace(/[.+^${}()|\\]/g, "\\$&").replaceAll("[!", "[^").replaceAll("*", ".*").replaceAll("?", ".");
+// (${X}git, g?t) is judged as each of them it could be. One it can't read at all is asked
+// about, and judged only as those whose checks look at paths and pushes, not at how many
+// arguments there are: as git config, any two words would be a write, and as xargs or
+// parallel, input would follow.
+const CHECKED = () => [...ANY_COMMAND(), "xargs", "parallel", ...[...GIT_BUILTINS].map((c) => `git-${c}`)];
+const ANY_COMMAND = () => ["git", ...[...PUSHES].map((c) => `git-${c}`), "gh", "rm", "find", "su", "diskutil", "dd", "eval", ...SHELLS, ...[...WRAPPERS.keys()].filter((w) => w !== "xargs" && w !== "parallel")];
+
+// A shell glob as a regular expression: * and ? never match a "/", ** matches anything.
+function globRegex(pattern, flags = "") {
+  let source = "";
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    const close = c === "[" ? pattern.indexOf("]", i + 2) : -1;
+    if (c === "*" && pattern[i + 1] === "*") {
+      source += ".*";
+      i++;
+    } else if (c === "*") source += "[^/]*";
+    else if (c === "?") source += "[^/]";
+    else if (close !== -1) {
+      source += `[${pattern.slice(i + 1, close).replace(/^!/, "^").replaceAll("\\", "\\\\")}]`;
+      i = close;
+    } else source += c.replace(/[.+^${}()|[\]\\/]/g, "\\$&");
+  }
   try {
-    return new RegExp(`^${source}$`).test(name);
+    return new RegExp(`^${source}$`, flags);
   } catch {
-    return false; // an unclosed [ matches only itself
+    return /(?!)/; // a class the shell reads some other way matches nothing here
   }
 }
 
 // A command word the guard can't read, or one that could split, vanish or match files,
-// could be any command. What it could turn into is judged, and so are the words after it as
-// a command of their own (it could be empty, or a wrapper). A push after it is judged as a
-// git push, in a repo the guard can't name.
+// could be any command. The words after it are judged as a command of their own (it could
+// be empty, or a wrapper), each value it could have is judged, and so is each command with a
+// check whose name it could be, where a part the guard can't read matches anything. One that
+// could split could hold a whole command, so it's asked about. That judging doesn't nest: a
+// second such word inside it is asked about. A push after it is judged as a git push, in a
+// repo the guard can't name.
+let reading = false;
 function checkUnread(cmd, words, state, child) {
   const [first, ...rest] = words;
-  const as = (name) => checkRun(cmd, [[{ text: name, quoted: true }], ...rest], state, child);
   if (rest.length) checkRun(cmd, rest, state, child);
-  const tail = first.slice(first.findLastIndex((p) => !("text" in p)) + 1).map((p) => p.text).join("");
-  if (tail && tail !== raw(first)) as(tail);
-  let values = [];
+  let values = null;
   try {
     values = expand(first, state);
   } catch (e) {
     if (!(e instanceof Unresolved)) throw e;
   }
-  for (const v of values) {
+  for (const v of values ?? []) {
     const pieces = v.split(/\s+/).filter(Boolean);
     if (pieces.length) checkRun(cmd, [...pieces.map((t) => [{ text: t, quoted: true }]), ...rest], state, child);
   }
-  for (const pattern of [raw(first), ...values].filter((v) => /[*?[]/.test(v)))
-    for (const name of CHECKED()) if (globMatches(basename(pattern), name)) as(name);
+  // The name the command could have: after the last "/", where an unread part could hold one.
+  const name = first.reduce((tail, p) => ("text" in p ? tail + p.text : "*").replace(/^.*\//s, ""), "");
+  const any = !values && /^\**$/.test(name);
+  if (!values && (any || first.some((p) => !p.quoted && !("text" in p)))) ask(`runs ${raw(first)}, which the guard can't read, so it could be any command`);
+  const patterns = values ? values.map((v) => basename(v)).filter((p) => /[*?[]/.test(p)) : [name];
+  const names = any ? ANY_COMMAND() : CHECKED().filter((n) => patterns.some((p) => globRegex(p).test(n)));
+  if (names.length && reading) ask(`runs ${raw(first)}, which the guard can't read, inside another command it can't read`);
+  else if (names.length) {
+    reading = true;
+    try {
+      for (const n of names) checkRun(cmd, [[{ text: n, quoted: true }], ...rest], state, child);
+    } finally {
+      reading = false;
+    }
+  }
   const push = words.findIndex((w, k) => k > 0 && one(w, state) === "push");
   if (push !== -1 && one(first, state) === null)
     checkGitPush({ words, state, options: [{ name: "-C", value: null }], command: "push", at: push, unread: null }, child);
@@ -1272,6 +1305,10 @@ function checkRuns(words, what, state, inherited) {
   else if (words.length) checkLine(argvLine(words, state), copy(inherited));
 }
 const argvLine = (words, state) => words.map((w) => (one(w, state) === null ? raw(w) : quote(one(w, state)))).join(" ");
+
+// Commands that print code to set up a shell, for eval to run.
+const SETUP =
+  /^\s*(?:[\w./-]*\/)?(?:brew shellenv|ssh-agent(?: -[sc])?|direnv (?:export|hook) \w+|(?:rbenv|pyenv|nodenv|zoxide|starship|mise) (?:init|activate|env)(?: -)?(?: \w+)?|fnm env(?: --[\w-]+)*|opam env)\s*$/;
 
 // A command's own checks, from its name on. child is what it runs with.
 function checkCommand(cmd, words, state, child) {
@@ -1346,7 +1383,20 @@ function checkCommand(cmd, words, state, child) {
     readOnly = c !== undefined || cmd.heredocs.length > 0;
   }
   if (name === "eval") {
-    checkLine(strings.slice(1).join(" "), copy(state));
+    // Code eval gets from somewhere the guard can't see is asked about, unless it's what a
+    // well-known tool prints to set up a shell (eval "$(brew shellenv)").
+    const parts = args[0]?.filter((p) => p.text !== "") ?? [];
+    const setup = args.length === 1 && parts.length === 1 && SETUP.test(parts[0].sub ?? "");
+    const unread = args.find((w) => {
+      try {
+        return !expand(w, state);
+      } catch (e) {
+        if (e instanceof Unresolved) return true;
+        throw e;
+      }
+    });
+    if (unread && !setup) ask(`eval runs ${raw(unread)}, code the guard can't read`);
+    if (!setup) checkLine(strings.slice(1).join(" "), copy(state));
     readOnly = true;
   }
   if (!readOnly) staleAfter(state);

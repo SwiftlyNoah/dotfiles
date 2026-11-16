@@ -238,10 +238,8 @@ cases("pass", [
   "timeout 60 npm test",
   "xargs grep foo",
   "find . -name '*.log' | xargs rm -f",
-  "$EDITOR notes.txt",
   "noglob ls *",
   "caffeinate -i make",
-  "$G push origin feature",
   "bash -c 'echo ok'",
   "bash -c -- 'echo ok'",
   "bash script.sh",
@@ -302,6 +300,48 @@ cases("deny", [
 ]);
 // /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
 cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
+
+// Code the guard can't read is never run unchecked: eval or sh -c of a string it can't
+// work out, or a command word that could split into a whole command, is asked about. A
+// command word it can only partly read is judged as each command with a check it could be.
+cases("ask", [
+  `eval "$(printf 'git push -f origin ma%sn' i)"`,
+  `bash -c "$(printf 'git push -f origin ma%sn' i)"`,
+  'sh -c "$X"',
+  'eval "$X"',
+  "eval $X",
+  "$(printf 'git push -f origin main')",
+  "`printf git` push -f origin main",
+  "$X",
+  "$EDITOR notes.txt",
+  "$G push origin feature",
+  '"$A" "$B" "$C" "$D" ls',
+  'X=$(echo git); "$X" push -f origin main',
+  '"$C" -C . push -f origin main',
+]);
+cases("deny", [
+  'X=$(echo rm); "$X" -rf ~/Documents',
+  'X=~/Documents; "$C" -rf "$X"',
+  'X=~/Documents; ${C}m -rf "$X"',
+  'X=~/Documents; "${C}m" -rf "$X"',
+  '"$C" -n 5 rm -rf "$U"',
+  '"$A" "$B" rm -rf "$U"',
+  'X=~/Library; "$(which r?)" -rf "$X"',
+  'eval "$X"; rm -rf "$U"',
+]);
+cases("pass", [
+  'eval "$(brew shellenv)"',
+  'eval "$(/opt/homebrew/bin/brew shellenv)"',
+  'eval "$(ssh-agent -s)"',
+  'eval "$(direnv hook zsh)"',
+  "eval echo hi",
+  'X="echo hi"; eval "$X"',
+  'bash -c "echo $HOME"',
+  '"$(npm bin)/eslint" .',
+  '"$(git rev-parse --show-toplevel)/scripts/test.sh" --fast',
+]);
+cases("ask", ['"$PYTHON" script.py arg']);
+cases("deny", ['"$X" config remote.origin.push x']);
 
 // Every command runner the guard knows has the command it runs checked: watch, flock,
 // ionice, taskset, chronic, unbuffer, parallel and su, find's -exec, and the commands git
