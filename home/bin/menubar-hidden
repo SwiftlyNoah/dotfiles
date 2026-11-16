@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Keep the given apps out of the menu bar (System Settings, Menu Bar, "Allow in the Menu Bar").
+
+    menubar-hidden <bundle id> [<bundle id> ...]
+
+macOS 27 keeps those switches in Control Center's group container, as a binary plist inside the
+"trackedApplications" key: pairs of {bundle} then {location, menuItemLocations, isAllowed}. This
+sets isAllowed to false for each bundle id given (adding the pair when the app is not listed yet),
+writes it back through `defaults` so cfprefsd sees the change, and restarts Control Center so the
+icons go at once. Every other app's switch is left as it is. Run by home.nix on each switch.
+"""
+import plistlib
+import subprocess
+import sys
+from pathlib import Path
+
+DOMAIN = Path.home() / "Library/Group Containers/group.com.apple.controlcenter/Library/Preferences/group.com.apple.controlcenter"
+
+
+def main(bundles: list[str]) -> int:
+    if not bundles:
+        print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
+        return 2
+    plist = DOMAIN.with_suffix(".plist")
+    data = plistlib.loads(plist.read_bytes()) if plist.exists() else {}
+    tracked = plistlib.loads(data["trackedApplications"]) if "trackedApplications" in data else []
+
+    changed = False
+    for bundle in bundles:
+        entry = next((e for e in tracked if "isAllowed" in e and e.get("location") == {"bundle": {"_0": bundle}}), None)
+        if entry is None:
+            tracked += [
+                {"bundle": {"_0": bundle}},
+                {"location": {"bundle": {"_0": bundle}}, "menuItemLocations": [{"bundle": {"_0": bundle}}], "isAllowed": False},
+            ]
+            changed = True
+        elif entry["isAllowed"]:
+            entry["isAllowed"] = False
+            changed = True
+    if not changed:
+        return 0
+
+    blob = plistlib.dumps(tracked, fmt=plistlib.FMT_BINARY).hex()
+    subprocess.run(["/usr/bin/defaults", "write", str(DOMAIN), "trackedApplications", "-data", blob], check=True)
+    subprocess.run(["/usr/bin/killall", "ControlCenter"], check=False, capture_output=True)
+    print("menubar-hidden: hid " + ", ".join(bundles))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

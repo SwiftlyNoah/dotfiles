@@ -160,10 +160,17 @@ in
     fi
   '';
 
+  # Apps kept out of the menu bar altogether (System Settings, Menu Bar, "Allow in the Menu
+  # Bar"): 1Password and ColorSlurp, reached by keyboard instead. Same Full Disk Access caveat as
+  # the order below, so a refusal is a warning.
+  home.activation.menuBarHidden = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${pkgs.python314}/bin/python3 ${./home/bin/menubar-hidden} com.1password.1password com.IdeaPunch.ColorSlurp ||
+      warnEcho "Menu bar icons not hidden: this terminal has no Full Disk Access. Run ./rebuild.sh again once it has."
+  '';
+
   # The menu bar, left to right: a Time Machine backup's progress while one runs (Hammerspoon),
-  # Cisco Secure Client (the VPN), Maccy, Amphetamine, 1Password, Noah's Mac, Tailscale,
-  # ColorSlurp, Noah's Pool, Now Playing, Wi-Fi, Battery, Control Center, Clock, and no
-  # Spotlight (Search) icon. macOS 27 keeps the order here,
+  # Cisco Secure Client (the VPN), Maccy, Amphetamine, Noah's Mac, Tailscale, Noah's Pool,
+  # Now Playing, Wi-Fi, Battery, Control Center, Clock, and no Spotlight (Search) icon. macOS 27 keeps the order here,
   # as each item's distance from the right edge, and rewrites it when an icon is ⌘-dragged.
   # (configuration.nix can't write it: nix-darwin splits the path at its space.)
   home.activation.menuBarOrder = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
