@@ -1,7 +1,7 @@
 // Feeds PreToolUse payloads to guard.mjs and checks what it decides. Run: node --test
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
@@ -10,11 +10,12 @@ const GUARD = join(import.meta.dirname, "guard.mjs");
 const HOME = homedir();
 const ME = join(HOME, "me");
 const TMPDIR = "/var/folders/zz/test/T/";
+const BASH_ENTRY = ["--fail-closed"]; // what settings.json's Bash entry passes
 
 // "pass" when the guard stays out of it, else its permissionDecision.
 function decision(command, { cwd = ME, tool = "Bash", input, env = process.env } = {}) {
   const payload = { tool_name: tool, tool_input: input ?? { command }, cwd };
-  const run = spawnSync(process.execPath, [GUARD], {
+  const run = spawnSync(process.execPath, [GUARD, ...(tool === "Bash" ? BASH_ENTRY : [])], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: { ...env, TMPDIR },
@@ -25,7 +26,7 @@ function decision(command, { cwd = ME, tool = "Bash", input, env = process.env }
 }
 
 function reason(command, cwd = ME, env = process.env) {
-  const run = spawnSync(process.execPath, [GUARD], {
+  const run = spawnSync(process.execPath, [GUARD, ...BASH_ENTRY], {
     input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd }),
     encoding: "utf8",
     env: { ...env, TMPDIR },
@@ -403,4 +404,139 @@ test("mail sends and Drive shares still ask", () => {
   assert.equal(decision(null, { tool: "mcp__claude_ai_Google_Drive__share_file", input: {} }), "ask");
   assert.equal(decision(null, { tool: "Read", input: { file_path: `${HOME}/.config/claude-pool/age-identity` } }), "deny");
   assert.equal(decision(null, { tool: "Read", input: { file_path: `${HOME}/notes.txt` } }), "pass");
+});
+
+// Failing closed, for Bash only. Claude Code lets a call through when a hook passes its
+// 10 s timeout or exits with a status other than 0 or 2, unless the hook's entry says
+// onFailure "block". A Bash call has to be refused when the guard breaks; every other tool
+// keeps going through a broken guard, so a session can always repair it with Edit.
+const HOOK_TIMEOUT_MS = 10_000;
+
+// Runs the guard the way Claude Code does, killing it at the hook timeout. stdin null
+// leaves stdin open. decision is "pass" when there's no answer.
+function hook(stdin, { args = [], env = process.env } = {}) {
+  const started = Date.now();
+  const child = spawn(process.execPath, [GUARD, ...args], { env: { ...env, TMPDIR } });
+  const timeout = setTimeout(() => child.kill("SIGKILL"), HOOK_TIMEOUT_MS);
+  let stdout = "";
+  child.stdout.setEncoding("utf8").on("data", (d) => (stdout += d));
+  child.stderr.resume();
+  if (stdin !== null) child.stdin.end(stdin);
+  return new Promise((done) =>
+    child.on("close", (status) => {
+      clearTimeout(timeout);
+      child.stdin.destroy();
+      const output = stdout ? JSON.parse(stdout).hookSpecificOutput : {};
+      done({ status, ms: Date.now() - started, decision: output.permissionDecision ?? "pass", reason: output.permissionDecisionReason });
+    }),
+  );
+}
+
+const payload = (tool, input, cwd = ME) => JSON.stringify({ tool_name: tool, tool_input: input, cwd });
+const refused = /^guard: .*, so this call is refused rather than let through unchecked/;
+
+// A guard killed at the hook timeout comes back with status null, so the status checks
+// below are also the time checks. The slow ones wait in parallel.
+describe("failing closed", { concurrency: true }, () => {
+  test("ordinary calls still pass, quickly", async () => {
+    for (const [stdin, args] of [
+      [payload("Bash", { command: "ls -la" }), BASH_ENTRY],
+      [payload("Bash", { command: "ls -la" }), []],
+      [payload("Edit", { file_path: "/tmp/x.txt" }), []],
+    ]) {
+      const run = await hook(stdin, { args });
+      assert.deepEqual([run.status, run.decision], [0, "pass"], stdin);
+    }
+  });
+
+  test("a guard that throws refuses Bash", async () => {
+    // tool_input null throws on reading the command; a cwd that isn't a folder name throws
+    // deep inside the checks.
+    for (const [stdin, args] of [
+      [payload("Bash", null), BASH_ENTRY],
+      [payload("Bash", null), []],
+      [payload("Bash", { command: "cd build && rm -rf dist" }, 5), BASH_ENTRY],
+    ]) {
+      const run = await hook(stdin, { args });
+      assert.deepEqual([run.status, run.decision], [0, "deny"], stdin);
+      assert.match(run.reason, /^guard: failed \(.+\), so this call is refused/);
+    }
+  });
+
+  test("a malformed payload refuses Bash", async () => {
+    for (const [stdin, args] of [
+      ["", BASH_ENTRY],
+      ["not json", BASH_ENTRY],
+      ["null", BASH_ENTRY],
+      [JSON.stringify({ tool_input: { command: "ls" } }), BASH_ENTRY],
+      [payload("Bash", {}), BASH_ENTRY],
+      [payload("Bash", { command: 5 }), []],
+      [payload("Bash", "rm -rf ~"), []],
+    ]) {
+      const run = await hook(stdin, { args });
+      assert.deepEqual([run.status, run.decision], [0, "deny"], stdin);
+      assert.match(run.reason, refused);
+    }
+  });
+
+  test("a guard that throws on Edit, or gets a payload it can't read, lets the call through", async () => {
+    // Exit status 1 is a hook failure, which Claude Code lets through on an entry without
+    // onFailure "block", as on main before the guard failed closed.
+    for (const stdin of [payload("Edit", null), payload("Write", null), "not json", ""]) {
+      const run = await hook(stdin);
+      assert.deepEqual([run.status, run.decision], [1, "pass"], stdin);
+    }
+  });
+
+  test("a git that never answers is refused before the hook times out", async (t) => {
+    const bin = mkdtempSync(join(tmpdir(), "guard-git-"));
+    t.after(() => rmSync(bin, { recursive: true, force: true }));
+    writeFileSync(join(bin, "git"), "#!/bin/sh\nexec /bin/sleep 60\n", { mode: 0o755 });
+    // Only the fake git is on PATH, so the real one can't answer instead.
+    const run = await hook(payload("Bash", { command: "git push --force" }), { args: BASH_ENTRY, env: { ...process.env, PATH: bin } });
+    assert.deepEqual([run.status, run.decision], [0, "deny"]);
+    assert.match(run.reason, /can't tell which branch .* is on \(git didn't say within 3 s\)/);
+  });
+
+  // Each git answer here comes in time, but four in a row don't. The process has to end by
+  // the deadline, not only print its refusal: Claude Code reads the answer when the process
+  // exits, and one still waiting on git at the hook timeout counts as a timeout.
+  test("a chain of slow git calls ends within the deadline and is refused", async (t) => {
+    const bin = mkdtempSync(join(tmpdir(), "guard-git-"));
+    t.after(() => rmSync(bin, { recursive: true, force: true }));
+    writeFileSync(join(bin, "git"), "#!/bin/sh\n/bin/sleep 2.3\necho feature\n", { mode: 0o755 });
+    const command = Array(4).fill("git push --force").join("; ");
+    const run = await hook(payload("Bash", { command }), { args: BASH_ENTRY, env: { ...process.env, PATH: bin } });
+    assert.deepEqual([run.status, run.decision], [0, "deny"]);
+    assert.match(run.reason, /can't tell which branch .* is on \((git didn't say within [\d.]+ s, the time the guard had left|the guard ran out of time before asking git)\)/);
+  });
+
+  test("a guard that runs past its deadline refuses Bash", async () => {
+    const run = await hook(null, { args: BASH_ENTRY });
+    assert.deepEqual([run.status, run.decision], [0, "deny"]);
+    assert.match(run.reason, /didn't finish within 7 s, so this call is refused/);
+    assert.ok(run.ms >= 7_000, `took ${run.ms} ms`);
+  });
+
+  test("a guard that runs past its deadline on any other tool doesn't refuse it", async () => {
+    // Killed at the hook timeout with no answer, which Claude Code lets through.
+    const run = await hook(null);
+    assert.deepEqual([run.status, run.decision], [null, "pass"]);
+  });
+});
+
+test("settings.json blocks a failed guard on Bash only", () => {
+  const settings = JSON.parse(readFileSync(join(import.meta.dirname, "..", "settings.json"), "utf8"));
+  const entries = settings.hooks.PreToolUse.flatMap(({ matcher, hooks }) =>
+    hooks.filter((h) => h.command.includes("guard.mjs")).map((h) => ({ matcher, ...h })),
+  );
+  const matches = (tool) => entries.filter((e) => new RegExp(`^(?:${e.matcher})$`).test(tool));
+  const [bash] = matches("Bash");
+  assert.equal(matches("Bash").length, 1);
+  assert.equal(bash.onFailure, "block");
+  assert.ok(bash.command.endsWith(` ${BASH_ENTRY.join(" ")}`), bash.command);
+  for (const tool of ["Read", "Edit", "Write", "mcp__claude_ai_Gmail__send_message"]) {
+    const [entry, ...more] = matches(tool);
+    assert.deepEqual([more.length, entry.onFailure, entry.command.includes("--fail-closed")], [0, undefined, false], tool);
+  }
 });

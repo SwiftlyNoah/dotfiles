@@ -30,11 +30,14 @@
 //
 // Wired up as a PreToolUse hook in home/.claude/settings.json, which runs it from this
 // repo (no rebuild needed). Emitting nothing leaves the decision alone. A session with
-// no one to ask (claude -p) is refused instead. Tests: node --test (guard.test.mjs).
+// no one to ask (claude -p) is refused instead. When the guard itself breaks, a Bash call
+// is refused and every other tool goes on (see Running, at the end). Tests: node --test
+// (guard.test.mjs).
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import vm from "node:vm";
 
 const HOME = homedir();
 const OUTWARD = {
@@ -56,19 +59,21 @@ const WRAPPERS = new Set(["command", "builtin", "exec", "nohup", "time", "sudo",
 const DECLARE = new Set(["export", "declare", "local", "readonly", "typeset"]);
 const MAX_VALUES = 64;
 const MAX_DEPTH = 8;
-const GIT_TIMEOUT_MS = 3_000;
+const now = () => performance.now(); // ms since the process started
+const DEADLINE = 7_000; // on that clock; the hook's timeout in settings.json is 10 s
+const GIT_TIMEOUT_MS = 3_000; // at most, per git call
+const GIT_MARGIN_MS = 500; // every git call ends this long before the deadline
 
-function decide(permissionDecision, reason) {
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision,
-        permissionDecisionReason: `guard: ${reason}`,
-      },
-    }),
-  );
-  process.exit(0);
+// The first decision ends the checks: decide() throws it up to judge().
+class Verdict {
+  constructor(decision, reason) {
+    this.decision = decision;
+    this.reason = reason;
+  }
+}
+
+function decide(decision, reason) {
+  throw new Verdict(decision, reason);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -506,19 +511,23 @@ function gitCommand(words, state, env) {
   return git;
 }
 
-// What git prints for args in the repo at dir. Throws, saying why, when git fails or
-// doesn't answer in time.
+// What git prints for args in the repo at dir, asked within the time the guard has left
+// before its deadline. Throws, saying why, when git fails or doesn't answer in time.
 function runGit(dir, args) {
+  const left = DEADLINE - GIT_MARGIN_MS - now();
+  if (left <= 0) throw new Error("the guard ran out of time before asking git");
+  const timeout = Math.ceil(Math.min(GIT_TIMEOUT_MS, left));
   try {
     return execFileSync("git", ["-C", dir, ...args], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: GIT_TIMEOUT_MS,
+      timeout,
       killSignal: "SIGKILL",
     });
   } catch (e) {
+    const within = `${+(timeout / 1000).toFixed(1)} s${timeout < GIT_TIMEOUT_MS ? ", the time the guard had left" : ""}`;
     const why = e.code ?? (e.signal ? `killed by ${e.signal}` : `exit ${e.status}`);
-    throw new Error(e.code === "ETIMEDOUT" ? `git didn't say within ${GIT_TIMEOUT_MS / 1000} s` : `git couldn't say: ${why}`);
+    throw new Error(e.code === "ETIMEDOUT" ? `git didn't say within ${within}` : `git couldn't say: ${why}`);
   }
 }
 
@@ -780,9 +789,85 @@ function checkBash(command, cwd) {
   checkLine(command, { vars: new Map(), exported: new Set(), cwd, depth: 0 });
 }
 
-const input = JSON.parse(readFileSync(0, "utf8"));
-const { tool_name: tool, tool_input: args = {}, cwd = process.cwd() } = input;
-if (tool === "Bash") checkBash(args.command ?? "", cwd);
-else if (["Read", "Edit", "Write"].includes(tool) && POOL_KEY.test(args.file_path ?? ""))
-  decide("deny", "the claude-pool key is never read or copied");
-else if (OUTWARD[tool]) decide("ask", OUTWARD[tool]);
+// The hook's payload in, a Verdict (or null to stay out of it) back. Throws on a payload
+// it can't read.
+function judge(payload) {
+  const { tool_name: tool, tool_input: args = {}, cwd = process.cwd() } = payload;
+  if (typeof tool !== "string") throw new TypeError("the payload names no tool");
+  try {
+    if (tool === "Bash") {
+      if (typeof args?.command !== "string") throw new TypeError("the Bash call has no command");
+      checkBash(args.command, cwd);
+    } else if (["Read", "Edit", "Write"].includes(tool) && POOL_KEY.test(args.file_path ?? ""))
+      decide("deny", "the claude-pool key is never read or copied");
+    else if (OUTWARD[tool]) decide("ask", OUTWARD[tool]);
+  } catch (e) {
+    if (e instanceof Verdict) return e;
+    throw e;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------------------
+// Running. A Bash call fails closed: when the guard can't finish its checks (a payload it
+// can't read, a throw, git not answering, its deadline passing) it refuses the call. Every
+// other tool fails open, as Claude Code does for a hook that fails, so a broken guard never
+// blocks the Edit that would fix it. settings.json's Bash entry passes --fail-closed, so a
+// payload too broken to name its tool is refused there, and says onFailure "block", for a
+// guard that can't even start. The guard keeps its own deadline, under the hook's timeout,
+// since a Claude Code that predates onFailure ignores it.
+
+let closed = process.argv.includes("--fail-closed");
+
+function answer(verdict) {
+  if (verdict) {
+    const reason = `guard: ${verdict.reason}`;
+    const output = { hookEventName: "PreToolUse", permissionDecision: verdict.decision, permissionDecisionReason: reason };
+    try {
+      writeSync(1, JSON.stringify({ hookSpecificOutput: output }));
+    } catch {
+      // Exit status 2 blocks the call whatever the hook's settings say.
+      try {
+        writeSync(2, reason);
+      } finally {
+        process.exit(2);
+      }
+    }
+  }
+  process.exit(0);
+}
+
+const refuse = (why) =>
+  answer({
+    decision: "deny",
+    reason: `${why}, so this call is refused rather than let through unchecked. Run it again; if this keeps happening, ~/.dotfiles/home/.claude/hooks/guard.mjs needs fixing.`,
+  });
+const late = () => refuse(`didn't finish within ${DEADLINE / 1000} s`);
+
+// Failing open is failing the way main did: a stack on stderr and exit status 1.
+function fail(e) {
+  if (!closed) {
+    process.stderr.write(`${e?.stack ?? e}\n`);
+    process.exit(1);
+  }
+  if (e?.code === "ERR_SCRIPT_EXECUTION_TIMEOUT") late();
+  refuse(`failed (${e?.message ?? e})`);
+}
+
+async function main() {
+  let text = "";
+  process.stdin.setEncoding("utf8");
+  for await (const chunk of process.stdin) text += chunk;
+  const payload = JSON.parse(text);
+  if (typeof payload?.tool_name === "string") closed = payload.tool_name === "Bash";
+  if (!closed) return answer(judge(payload));
+  // The checks run synchronously, where no timer can stop them; a vm timeout can.
+  globalThis.guardJudge = () => judge(payload);
+  answer(vm.runInThisContext("guardJudge()", { timeout: Math.max(1, Math.floor(DEADLINE - now())) }));
+}
+
+process.on("uncaughtException", fail);
+process.on("unhandledRejection", fail);
+// A Bash payload still not read by the deadline is refused; any other waits for the hook timeout.
+setTimeout(() => closed && late(), DEADLINE - now());
+main().catch(fail);
