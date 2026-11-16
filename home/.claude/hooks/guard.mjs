@@ -8,11 +8,13 @@
 //   - sending, replying to or forwarding mail, and trashing mail, events or Drive files
 //   - sharing a Google Drive file
 //   - a force push to main or master, or deleting either (including a push with no branch
-//     named, from main; git's arguments are read the way git reads them, and the branch a
-//     repo is on, as in "$(git branch --show-current)", is asked of git; a force push whose
-//     repo or branch the guard can't work out is refused, like an rm -r target below, and
-//     so is git config on the command line or in git's environment that could redirect a
-//     push or define an alias; a push that doesn't force but holds a word the guard can't
+//     named, from main, --prune, git send-pack and gh api; git's arguments are read the way
+//     git reads them, and the branch a repo is on, as in "$(git branch --show-current)", is
+//     asked of git, until an earlier command in the line could have switched it; so are
+//     the config that decides where a push with no refspec goes, and aliases. A force push
+//     whose repo or branch the guard can't work out is refused, like an rm -r target below,
+//     and so is any config given to git, in its environment or written with git config,
+//     beyond a short safe list; a push that doesn't force but holds a word the guard can't
 //     read is asked about, since that word could force it)
 //   - deleting a GitHub repo
 //   - rm -r on /, my home folder, or a folder directly in either (~/Documents, /Users)
@@ -30,9 +32,9 @@
 //
 // Wired up as a PreToolUse hook in home/.claude/settings.json, which runs it from this
 // repo (no rebuild needed). Emitting nothing leaves the decision alone. A session with
-// no one to ask (claude -p) is refused instead. When the guard itself breaks, a Bash call
-// is refused and every other tool goes on (see Running, at the end). Tests: node --test
-// (guard.test.mjs).
+// no one to ask (claude -p) is refused instead. Monitor's command is checked like Bash's.
+// When the guard itself breaks, a Bash or Monitor call is refused and every other tool goes
+// on (see Running, at the end). Tests: node --test (guard.test.mjs).
 import { execFileSync } from "node:child_process";
 import { writeSync } from "node:fs";
 import { homedir } from "node:os";
@@ -54,6 +56,7 @@ const POOL_KEY = /claude-pool\/age-identity/;
 const TMP = process.env.TMPDIR ? resolve(process.env.TMPDIR) : "/tmp";
 const TEMP_ROOTS = [...new Set(["/tmp", "/private/tmp", "/var/folders", "/private/var/folders", TMP])];
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+const SHELL_TOOLS = new Set(["Bash", "Monitor"]); // the tools that run a shell command
 const RESERVED = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "}", "done", "fi", "esac", "time"]);
 // Commands that run the command after them, with how many words each takes before it
 // (timeout's duration, script's file). noglob, nocorrect and - are zsh's precommand words.
@@ -1177,9 +1180,11 @@ function judge(payload) {
   const { tool_name: tool, tool_input: args = {}, cwd = process.cwd() } = payload;
   if (typeof tool !== "string") throw new TypeError("the payload names no tool");
   try {
-    if (tool === "Bash") {
-      if (typeof args?.command !== "string") throw new TypeError("the Bash call has no command");
-      checkBash(args.command, cwd);
+    if (SHELL_TOOLS.has(tool)) {
+      // Monitor can open a WebSocket instead of running a command.
+      const socket = tool === "Monitor" && args?.command === undefined && args?.ws;
+      if (!socket && typeof args?.command !== "string") throw new TypeError(`the ${tool} call has no command`);
+      if (!socket) checkBash(args.command, cwd);
     } else if (["Read", "Edit", "Write"].includes(tool) && POOL_KEY.test(args.file_path ?? ""))
       decide("deny", "the claude-pool key is never read or copied");
     else if (OUTWARD[tool]) decide("ask", OUTWARD[tool]);
@@ -1191,13 +1196,14 @@ function judge(payload) {
 }
 
 // ---------------------------------------------------------------------------------------
-// Running. A Bash call fails closed: when the guard can't finish its checks (a payload it
-// can't read, a throw, git not answering, its deadline passing) it refuses the call. Every
-// other tool fails open, as Claude Code does for a hook that fails, so a broken guard never
-// blocks the Edit that would fix it. settings.json's Bash entry passes --fail-closed, so a
-// payload too broken to name its tool is refused there, and says onFailure "block", for a
-// guard that can't even start. The guard keeps its own deadline, under the hook's timeout,
-// since a Claude Code that predates onFailure ignores it.
+// Running. A Bash or Monitor call (both run a shell command) fails closed: when the guard
+// can't finish its checks (a payload it can't read, a throw, git not answering, its
+// deadline passing) it refuses the call. Every other tool fails open, as Claude Code does
+// for a hook that fails, so a broken guard never blocks the Edit that would fix it.
+// settings.json's entry for those two passes --fail-closed, so a payload too broken to name
+// its tool is refused there, and says onFailure "block", for a guard that can't even start.
+// The guard keeps its own deadline, under the hook's timeout, since a Claude Code that
+// predates onFailure ignores it.
 
 let closed = process.argv.includes("--fail-closed");
 
@@ -1244,7 +1250,7 @@ async function main() {
   process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) text += chunk;
   const payload = JSON.parse(text);
-  if (typeof payload?.tool_name === "string") closed = payload.tool_name === "Bash";
+  if (typeof payload?.tool_name === "string") closed = SHELL_TOOLS.has(payload.tool_name);
   if (!closed) return answer(judge(payload));
   // The checks run synchronously, where no timer can stop them; a vm timeout can.
   globalThis.guardJudge = () => judge(payload);
