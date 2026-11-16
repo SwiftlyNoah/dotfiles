@@ -8,9 +8,10 @@
 //   - sending, replying to or forwarding mail, and trashing mail, events or Drive files
 //   - sharing a Google Drive file
 //   - a force push to main or master, or deleting either (including a push with no branch
-//     named, from main; git's arguments are read the way git reads them, and git config on
-//     the command line or in git's environment that could redirect a push or define an
-//     alias is refused)
+//     named, from main; git's arguments are read the way git reads them; a force push whose
+//     repo or branch the guard can't work out is refused, like an rm -r target below, and
+//     so is git config on the command line or in git's environment that could redirect a
+//     push or define an alias)
 //   - deleting a GitHub repo
 //   - rm -r on /, my home folder, or a folder directly in either (~/Documents, /Users)
 //   - erasing a disk (diskutil erase*, dd to a device)
@@ -53,6 +54,7 @@ const WRAPPERS = new Set(["command", "builtin", "exec", "nohup", "time", "sudo",
 const DECLARE = new Set(["export", "declare", "local", "readonly", "typeset"]);
 const MAX_VALUES = 64;
 const MAX_DEPTH = 8;
+const GIT_TIMEOUT_MS = 3_000;
 
 function decide(permissionDecision, reason) {
   process.stdout.write(
@@ -401,14 +403,6 @@ function checkRm(words, state) {
   }
 }
 
-function currentBranch(cwd) {
-  try {
-    return execFileSync("git", ["-C", cwd, "branch", "--show-current"], { encoding: "utf8" }).trim();
-  } catch {
-    return "";
-  }
-}
-
 // The one value a word has, or null when it has several or one the guard can't work out.
 function one(word, state) {
   try {
@@ -432,6 +426,7 @@ function oneArg(word, state) {
 
 const unknownGit = (what, fix) =>
   decide("deny", `can't tell ${what}, so it could be a force push to main or master. ${fix} and run it again.`);
+const unknownPush = (what) => unknownGit(what, "Name the branch literally (git push --force origin <branch>)");
 
 // The argument git gets from words[k]. It has to be one argument, since one that splits or
 // vanishes moves every word after it, and known unless only its place matters.
@@ -483,10 +478,36 @@ function gitCommand(words, state, env) {
   return null;
 }
 
-// The folder git works in: the shell's, moved by each -C.
-function gitFolder(options, cwd) {
-  let dir = cwd;
-  for (const { name, value } of options) if (name === "-C" && value !== null) dir = resolve(dir, value);
+// Which branch the repo at dir is on. Any failure refuses the call: an answer read as
+// "not main" would let a force push to main through.
+function currentBranch(dir) {
+  try {
+    return execFileSync("git", ["-C", dir, "branch", "--show-current"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: GIT_TIMEOUT_MS,
+      killSignal: "SIGKILL",
+    }).trim();
+  } catch (e) {
+    unknownPush(
+      e.code === "ETIMEDOUT"
+        ? `which branch ${dir} is on (git didn't say within ${GIT_TIMEOUT_MS / 1000} s)`
+        : `which branch ${dir} is on (git couldn't say: ${e.code ?? (e.signal ? `killed by ${e.signal}` : `exit ${e.status}`)})`,
+    );
+  }
+}
+
+// The folder git works in, or null when the guard can't pin it down: after a cd it
+// couldn't follow, with a -C it can't work out, or with the repo named some other way.
+function gitFolder(options, state, env) {
+  if (env.exported.has("GIT_DIR") || env.exported.has("GIT_WORK_TREE")) return null;
+  let dir = state.cwd;
+  for (const { name, value } of options) {
+    if (name === "--git-dir" || name === "--work-tree") return null;
+    if (name !== "-C") continue;
+    if (value === null || (dir === null && !isAbsolute(value))) return null;
+    dir = resolve(dir ?? "/", value);
+  }
   return dir;
 }
 
@@ -494,12 +515,14 @@ function gitFolder(options, cwd) {
 // that push every branch. git takes any prefix of one that names only it.
 const PUSH_VALUES = ["repo", "receive-pack", "exec", "recurse-submodules", "push-option"];
 const PUSH_FORCE = ["force", "force-with-lease", "force-if-includes", "mirror", "delete"];
+const PUSH_EVERY = ["all", "branches", "mirror"];
 const prefixOf = (name) => (option) => option.startsWith(name);
 
 // git push [options] [remote [refspec...]], with options anywhere until "--". Deleting a
 // branch counts as forcing it, and so does --mirror.
-function checkGitPush(words, { options, at }, state) {
+function checkGitPush(words, { options, at }, state, env) {
   let forced = false;
+  let every = false;
   let ended = false;
   const operands = [];
   for (let k = at + 1; k < words.length; k++) {
@@ -510,6 +533,7 @@ function checkGitPush(words, { options, at }, state) {
       const name = arg.slice(2).split("=")[0];
       if (name.startsWith("no-")) continue;
       forced ||= name.startsWith("force") || PUSH_FORCE.some(prefixOf(name));
+      every ||= PUSH_EVERY.some(prefixOf(name));
       if (!arg.includes("=") && PUSH_VALUES.some(prefixOf(name)) && ++k < words.length) gitArg(words, k, state, false);
     } else {
       // -fu, -d, -o value or -ovalue: what follows o in a cluster is its value.
@@ -521,7 +545,15 @@ function checkGitPush(words, { options, at }, state) {
   const refspecs = operands.slice(1).map((r) => r.replace(/^\+/, ""));
   forced ||= operands.some((r) => r.startsWith("+")) || refspecs.some((r) => r.startsWith(":"));
   if (!forced) return;
-  const targets = refspecs.length ? refspecs.map((r) => r.split(":").at(-1)) : [currentBranch(gitFolder(options, state.cwd ?? state.base))];
+  if (every || refspecs.includes(":")) decide("ask", "force push of every branch, main included");
+
+  // Where each refspec lands. Without one, or with HEAD, that's the branch the repo is on.
+  const targets = refspecs.map((r) => r.split(":").at(-1));
+  if (!targets.length || targets.some((t) => t === "HEAD" || t === "@")) {
+    const dir = gitFolder(options, state, env);
+    if (dir === null) unknownPush("which repo this force push runs in");
+    targets.push(currentBranch(dir));
+  }
   // git finds a short name like heads/main under refs/ on the remote.
   const protectedBranch = targets.find((t) => /(^|\/)(main|master)$/.test(t) || t.includes("*"));
   if (protectedBranch) decide("ask", `force push to ${protectedBranch}`);
@@ -530,7 +562,7 @@ function checkGitPush(words, { options, at }, state) {
 function checkGit(words, strings, state, env) {
   if (basename(strings[0]) !== "git") return;
   const command = gitCommand(words, state, env);
-  if (command?.command === "push") checkGitPush(words, command, state);
+  if (command?.command === "push") checkGitPush(words, command, state, env);
 }
 
 function checkSimple(cmd, state) {
@@ -674,7 +706,7 @@ function hardRefusals(command) {
 function checkBash(command, cwd) {
   if (POOL_KEY.test(command)) decide("deny", "the claude-pool key is never read or copied");
   hardRefusals(command);
-  checkLine(command, { vars: new Map(), exported: new Set(), cwd, base: cwd, depth: 0 });
+  checkLine(command, { vars: new Map(), exported: new Set(), cwd, depth: 0 });
 }
 
 const input = JSON.parse(readFileSync(0, "utf8"));

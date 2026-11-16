@@ -1,7 +1,7 @@
 // Feeds PreToolUse payloads to guard.mjs and checks what it decides. Run: node --test
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
@@ -12,23 +12,23 @@ const ME = join(HOME, "me");
 const TMPDIR = "/var/folders/zz/test/T/";
 
 // "pass" when the guard stays out of it, else its permissionDecision.
-function decision(command, { cwd = ME, tool = "Bash", input } = {}) {
+function decision(command, { cwd = ME, tool = "Bash", input, env = process.env } = {}) {
   const payload = { tool_name: tool, tool_input: input ?? { command }, cwd };
   const run = spawnSync(process.execPath, [GUARD], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, TMPDIR },
+    env: { ...env, TMPDIR },
   });
   assert.equal(run.status, 0, run.stderr);
   if (!run.stdout) return "pass";
   return JSON.parse(run.stdout).hookSpecificOutput.permissionDecision;
 }
 
-function reason(command, cwd = ME) {
+function reason(command, cwd = ME, env = process.env) {
   const run = spawnSync(process.execPath, [GUARD], {
     input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd }),
     encoding: "utf8",
-    env: { ...process.env, TMPDIR },
+    env: { ...env, TMPDIR },
   });
   return JSON.parse(run.stdout).hookSpecificOutput.permissionDecisionReason;
 }
@@ -231,6 +231,56 @@ describe("git push", () => {
     FEATURE,
   );
   at("pass", ['git -C "$(echo push)" status', "git push origin feature", "D=push; git -C $D status"], FEATURE);
+
+  // A force push with no branch named, or to HEAD, goes to the branch its repo is on, so the
+  // guard asks git. When it can't tell which repo that is, or git can't answer, it refuses:
+  // reading that as "not main" would let a force push to main through.
+  at("ask", [
+    `cd ${MAIN} && git push --force`,
+    `git -C ${MAIN} push --force`,
+    `git -c push.default=current -C ${MAIN} push -f origin`,
+    `/usr/bin/git -C ${MAIN} push --force`,
+    `git -C ${MAIN} push --force origin HEAD`,
+    `git -C ${MAIN} push --force origin @`,
+    `git -C ${FEATURE} push --force --all`,
+    `git -C ${FEATURE} push --mirror --force`,
+    `git -C ${FEATURE} push --force origin :`,
+    `git push --force origin 'refs/heads/*:refs/heads/*'`,
+  ]);
+  at("ask", ["git push --force", "git push --force -o ci.skip origin"], MAIN);
+  at("pass", [
+    `cd ${FEATURE} && git push --force`,
+    `git -C ${FEATURE} push --force origin HEAD`,
+    `cd $(echo ${MAIN}) && git push --force origin feature`,
+    `GIT_DIR=${MAIN}/.git git push --force origin feature`,
+  ]);
+  at("pass", ["git push --force"], FEATURE);
+  at("deny", [
+    `R=$(echo ${MAIN}); cd $R && git push --force`,
+    `cd "$(echo ${MAIN})" && git push --force`,
+    `git -C "$(echo ${MAIN})" push --force`,
+    `GIT_DIR=${MAIN}/.git git push --force`,
+    `export GIT_DIR=${MAIN}/.git; git push --force`,
+    `env GIT_WORK_TREE=${MAIN} git push --force`,
+    `git --git-dir=${MAIN}/.git push --force`,
+    `git --work-tree ${MAIN} push --force`,
+    `B=$(git -C ${MAIN} branch --show-current); git push --force origin $B`,
+    "git push --force",
+  ]);
+
+  test("a git that fails is refused, not read as some other branch", (t) => {
+    const bin = mkdtempSync(join(tmpdir(), "guard-git-"));
+    t.after(() => rmSync(bin, { recursive: true, force: true }));
+    writeFileSync(join(bin, "git"), "#!/bin/sh\nexit 128\n", { mode: 0o755 });
+    // Only the fake git is on PATH, so the real one can't answer instead.
+    const env = { ...process.env, PATH: bin };
+    assert.equal(decision("git push --force", { cwd: MAIN, env }), "deny");
+    assert.match(reason("git push --force", MAIN, env), /can't tell which branch .* is on \(git couldn't say: exit 128\).*Name the branch/);
+  });
+
+  test("an unknown repo is refused with how to fix the command", () => {
+    assert.match(reason("cd $R && git push --force", OUTSIDE), /can't tell which repo this force push runs in.*Name the branch/);
+  });
 
   test("a git refusal says how to fix the command", () => {
     assert.match(reason("git push origin $(echo +main)", FEATURE), /can't tell what git does with \$\(echo \+main\).*Write it out literally/);
