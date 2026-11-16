@@ -160,14 +160,31 @@ function dollar(s, i, quoted) {
   }
   if (!quoted && next === "'") {
     let j = i + 2;
-    let text = "";
-    for (; j < s.length && s[j] !== "'"; j++) text += s[j] === "\\" ? s[++j] : s[j];
-    return [{ text, quoted: true }, j];
+    for (; j < s.length && s[j] !== "'"; j++) if (s[j] === "\\") j++;
+    return [{ text: ansiC(s.slice(i + 2, j)), quoted: true }, j];
   }
   if (!quoted && next === '"') return [{ text: "", quoted: true }, i];
+  // zsh's $=NAME splits the value into words, $~NAME globs it, $^NAME and $+NAME change it too.
+  const flagged = /^[=~^+]+(?:[A-Za-z_]\w*|[0-9@*#?$!-])/.exec(s.slice(i + 1));
+  if (flagged) return [{ name: flagged[0], op: "", quoted }, i + flagged[0].length];
   const name = /^(?:[A-Za-z_]\w*|[0-9@*#?$!-])/.exec(s.slice(i + 1));
   if (name) return [{ name: name[0], op: "", quoted }, i + name[0].length];
   return [{ text: "$", quoted }, i];
+}
+
+// The text of $'body' as bash and zsh decode it: \n, \t and the like, octal \NNN, \xHH,
+// \uHHHH, \UHHHHHHHH and \cX. An unknown escape keeps its backslash, and a NUL ends the text.
+const ESCAPES = { a: "\x07", b: "\b", e: "\x1b", E: "\x1b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v", "\\": "\\", "'": "'", '"': '"', "?": "?" };
+function ansiC(body) {
+  const text = body.replace(/\\(?:([0-7]{1,3})|x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|c([\s\S])|([\s\S])?)/g, (all, oct, hex, u, U, ctrl, other) => {
+    if (oct) return String.fromCharCode(parseInt(oct, 8) & 0xff);
+    if (hex) return String.fromCharCode(parseInt(hex, 16));
+    const point = parseInt(u ?? U, 16);
+    if (u || U) return point <= 0x10ffff ? String.fromCodePoint(point) : all;
+    if (ctrl) return ctrl === "?" ? "\x7f" : String.fromCharCode(ctrl.toUpperCase().charCodeAt(0) & 0x1f);
+    return ESCAPES[other] ?? all;
+  });
+  return text.split("\0")[0];
 }
 
 function parse(line) {

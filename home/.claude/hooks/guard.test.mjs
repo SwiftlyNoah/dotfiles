@@ -303,6 +303,26 @@ cases("deny", [
 // /tmp/{x,/Users} is /tmp/x and /tmp//Users; {feature..main} is no sequence, so it stays as written.
 cases("pass", ["rm -rf /tmp/{x,/Users}", "git push -f origin {feature..main}", "rm -rf /tmp/{a,b}", "rm -rf /tmp/x{1..3}", "rm -rf /tmp/{a,b{c,d}}", "D=/tmp; rm -rf {$D/a,$D/b}", "find . -name x -exec ls {} \\;", "echo {a,b}"]);
 
+// $'...' is decoded the way bash and zsh decode it, so an escape can't hide what runs.
+cases("ask", [
+  "git push origin $'\\x2bmain'",
+  "git push -f origin ma$'\\x69'n",
+  "git push $'\\x2d\\x2dforce' origin main",
+  "diskutil $'\\x65rase'Disk APFS x disk9",
+  "$'\\x67it' push -f origin main",
+  "git push -f origin $'\\155ain'",
+  "git push -f origin $'\\u006dain'",
+  "git push -f origin $'\\U0000006dain'",
+  "git push origin $'\\053main'",
+  "git push -f origin $'main\\0junk'",
+]);
+cases("deny", ["rm -rf /tmp/$'\\x2e\\x2e'/Users", "rm -rf $'/tmp/\\56\\56/Users'", "git push -f origin $'\\cA'\"$B\""]);
+cases("pass", ["echo $'a\\tb\\n'", "git push origin $'feature'", "printf $'%s\\n' x", "git push -f origin $'fe\\x61ture'", "echo $'it\\'s'", "git push -f origin $'\\xZZmain'"]);
+
+// zsh's $=X splits X into words and $~X globs it, so neither is the plain text it looks like.
+cases("ask", ["X='-f origin main'; git push $=X", "X='+main'; git push origin $~X", 'git push origin "$=X"', "git push origin $^X"]);
+cases("deny", ["X=~; rm -rf $=X", "X=/; rm -rf $~X"]);
+
 // git's own programs in git-core (git-push, git-send-pack...) are read as git with that command.
 cases("ask", [
   "/nix/store/x-git-2.54.0/libexec/git-core/git-push --force origin main",
