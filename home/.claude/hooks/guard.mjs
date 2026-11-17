@@ -715,12 +715,13 @@ const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--co
 const redirects = (what) =>
   deny(`${what} can run a program the guard can't read or change what a push sends and where, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
 
-// Config and environment whose value is a pager or an editor. git runs an editor with a
-// file it wrote as its argument and feeds a pager on stdin, so a shell, source, eval, xargs
-// or an interpreter runs that text as code: only programs that do nothing else pass.
+// Config and environment whose value is a pager or an editor, PAGER, EDITOR and VISUAL
+// included, which git falls back to. git runs an editor with a file it wrote as its argument
+// and feeds a pager on stdin, so a shell, source, eval, xargs or an interpreter runs that
+// text as code: only programs that do nothing else pass.
 const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less", "vi", "vim", "nano"]);
 const COMMAND_KEYS = /^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i;
-const COMMAND_ENV = /^GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)$/;
+const COMMAND_ENV = /^(GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)|PAGER|EDITOR|VISUAL)$/;
 
 // Config that makes git run a program the guard can't read (hooks, an ssh command, a
 // credential helper or askpass, an fsmonitor hook, a diff or merge driver or tool, a filter,
@@ -749,24 +750,23 @@ const RUNS_PROGRAM = new RegExp(
 // git command, not only a push: git passes config given on its command line to each hook and
 // program it runs, and one of those (a post-commit hook that pushes) can push with it.
 const PUSH_CONFIG = /^(remote\..+|url\..+|push\.(?!(autosetupremote|followtags)$).+|branch\..+\.(merge|remote|pushremote))$/i;
-// http config, http.<url>.<key> included, also chooses where a push goes over http (a proxy,
-// curl's resolve list) and whether that host's certificate is checked, so it's refused on a
-// push except for the keys that tune speed and size. Off a push it passes, for a clone or
-// fetch through a proxy: a hook that pushes then gets it too. These two lists aren't every
-// way to steer a push: proxy variables such as https_proxy and the ssh client's own config
-// aren't checked.
+// http config, http.<url>.<key> included, also chooses which host git talks to over http (a
+// proxy, curl's resolve list) and whether that host's certificate is checked. It's refused
+// with every git command, not only a push, except for the keys that tune speed and size: a
+// fetch or ls-remote sends that host the credential helper's token, which can then push
+// anywhere, and a hook that pushes gets the config too. These lists aren't every way to steer
+// a push: proxy variables such as https_proxy and the ssh client's own config aren't checked.
 const HTTP_TRANSPORT = /^http\.(?!(.+\.)?(postbuffer|lowspeedlimit|lowspeedtime|maxrequests|version)$)/i;
 
 // Whether git run with key=value could run a program the guard can't read or change what a
-// push sends or where (push set when it could be a push). value is undefined when the guard
-// can't see it: then an http key counts as on a push. Hooks may go to /dev/null, which turns
-// them off, and fsmonitor may be on or off (true starts git's own daemon); a path is a hook
-// it runs.
-function risky(key, value, push) {
+// push sends or where. value is undefined when the guard can't see it. Hooks may go to
+// /dev/null, which turns them off, and fsmonitor may be on or off (true starts git's own
+// daemon); a path is a hook it runs.
+function risky(key, value) {
   if (/^core\.hookspath$/i.test(key)) return value !== "/dev/null";
   if (/^core\.fsmonitor$/i.test(key)) return !/^(true|false|yes|no|on|off|1|0|)$/i.test(value ?? "?");
   if (/^push\.default$/i.test(key)) return !["current", "simple"].includes(value);
-  return RUNS_PROGRAM.test(key) || PUSH_CONFIG.test(key) || (HTTP_TRANSPORT.test(key) && (push || value === undefined));
+  return RUNS_PROGRAM.test(key) || PUSH_CONFIG.test(key) || HTTP_TRANSPORT.test(key);
 }
 
 // Whether git's system config holds a key that steers a push, or an include, which could
@@ -807,11 +807,13 @@ const gitChild = (git, env) => ({ ...copy(env), gitConfig: git.config.map((c) =>
 // config given on its command line (own), and config passed on by a git that started this
 // one, whose pager or editor was checked there. A pager or editor (an unknown one counts)
 // must be one of the safe few, except on a push that doesn't page, which never runs either.
+// A command that may be an alias isn't a push here, whatever its name: git runs alias.push
+// for PUSH where it finds no git-PUSH program, and checkAlias doesn't see the editor.
 function checkGitSettings(git, env, push) {
   const programs = [];
   for (const { key, value, what, own } of git.config) {
     if (own && COMMAND_KEYS.test(key)) programs.push({ what, value });
-    else if (risky(key, value, push)) redirects(what);
+    else if (risky(key, value)) redirects(what);
   }
   for (const name of env.exported) {
     if (!env.vars.has(name)) continue; // exported as it already was
@@ -824,7 +826,7 @@ function checkGitSettings(git, env, push) {
       deny(`${what} isn't on the guard's list of GIT_ variables that can't run a program or change what a push sends and where, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
   }
   const unsafe = programs.find(({ value }) => !SAFE_PROGRAMS.has(value));
-  if (unsafe && !(PUSHES.has(git.command) && !pagesPush(git, env)))
+  if (unsafe && !(PUSHES.has(git.command) && !git.alias && !pagesPush(git, env)))
     deny(`${unsafe.what} sets a pager or editor, which git runs on text it writes, and only ${[...SAFE_PROGRAMS].join(", ")} can't run that text as code. Leave it out, or use one of those, and run it again.`);
 }
 
@@ -1120,7 +1122,7 @@ function checkGitConfig(git) {
   if (sub === "rename-section" || sub === "edit") redirects(`git config ${sub}`);
   if (sub === null ? read || (!write && operands.length <= 1) : sub !== "set") return;
   const [key = "", value] = operands;
-  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value, true)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
 }
 
 // git's own commands. Any other is an alias, or a git-<name> program on PATH.

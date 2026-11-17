@@ -892,14 +892,27 @@ describe("git push", () => {
       "git config sequence.editor sh",
       "git config core.pager sh",
       "git config --global core.editor bash",
+      // git falls back to EDITOR and VISUAL for its editor and to PAGER for its pager
+      // (2026-11-17: EDITOR=sh with GIT_EDITOR unset ran the message).
+      "env -u GIT_EDITOR EDITOR=sh git commit --allow-empty -e -m 'touch marker'",
+      "unset GIT_EDITOR; EDITOR=sh git commit -e -m x",
+      "VISUAL=sh git commit -e -m x",
+      "export EDITOR=bash; git commit -e -m x",
+      "PAGER=sh git log",
+      "PAGER=sh git -p push origin feature",
+      // A command git doesn't know by its exact name may be an alias, push included in any
+      // case, and an alias is checked without the pager and editor given to git.
+      "git -c core.editor=sh PUSH origin feature",
+      "GIT_EDITOR=sh git Push origin feature",
     ],
     FEATURE,
   );
-  at("pass", ["git -c core.pager='git push --force origin main' push origin feature", "GIT_PAGER=sh git push origin feature", "GIT_EDITOR=sh git push origin feature"], FEATURE);
-  // http config chooses which host gets a push (a proxy, curl's resolve list) and whether its
-  // certificate is checked, so on a push, written for later, or from a variable, only keys
-  // that tune speed and size pass. Off a push the rest pass too (2026-11-17: the guard passed
-  // all of these).
+  at("pass", ["git -c core.pager='git push --force origin main' push origin feature", "GIT_PAGER=sh git push origin feature", "GIT_EDITOR=sh git push origin feature", "PAGER=sh EDITOR=sh VISUAL=sh git push origin feature"], FEATURE);
+  at("pass", ["EDITOR=vim git commit", "VISUAL=nano git commit", "PAGER=cat git log", "PAGER=less git log"], FEATURE);
+  // http config chooses which host gets a push or a fetch (a proxy, curl's resolve list) and
+  // whether its certificate is checked, and a fetch sends that host the credential helper's
+  // token, so for every git command only keys that tune speed and size pass (2026-11-17: the
+  // guard passed all of these).
   at(
     "deny",
     [
@@ -914,6 +927,12 @@ describe("git push", () => {
       "git config http.proxy http://127.0.0.1:8080",
       "git config set http.proxy http://127.0.0.1:8080",
       "git config --global http.https://github.com/.sslVerify false",
+      "git -c http.curloptResolve=github.com:443:127.0.0.1 -c http.sslVerify=false ls-remote origin",
+      "git -c http.sslVerify=false fetch",
+      "git -c http.proxy=http://127.0.0.1:8080 -c http.sslVerify=false pull",
+      "git -c http.proxy=http://127.0.0.1:8080 clone https://example.invalid/r.git y",
+      "git -c http.proxy=http://127.0.0.1:8080 -c http.sslVerify=false commit -m x",
+      "git -c http.https://github.com/.proxy=http://127.0.0.1:8080 fetch",
     ],
     FEATURE,
   );
@@ -924,8 +943,8 @@ describe("git push", () => {
       "git -c http.version=HTTP/1.1 -c http.maxRequests=2 push origin feature",
       "git -c http.https://github.com/.postBuffer=524288000 push origin feature",
       "git --config-env http.postBuffer=N push origin feature",
-      "git -c http.sslVerify=false fetch",
-      "git -c http.proxy=http://127.0.0.1:8080 clone https://example.invalid/r.git y",
+      "git -c http.postBuffer=524288000 fetch",
+      "git -c http.lowSpeedTime=60 clone https://example.invalid/r.git y",
       "git config http.version HTTP/1.1",
     ],
     FEATURE,
@@ -1170,6 +1189,12 @@ describe("git push", () => {
     ["alias.rmall", "!rm -rf ~/Documents"],
     ["alias.pu", "!git push origin"],
   );
+  // Config keys ignore case, so git PUSH runs alias.push where no git-PUSH program is found
+  // (a case-sensitive disk, or a git built without its dashed commands), with the editor given
+  // to git (2026-11-17: the guard took it for a push, which never runs an editor).
+  const SHADOWED = repo("shadowed", ["alias.push", "commit --allow-empty -e -m x"]);
+  at("deny", ["git -c core.editor=sh PUSH origin feature", "GIT_EDITOR=sh git PUSH"], SHADOWED);
+  at("pass", ["git -c core.editor=sh push origin feature", "git PUSH", "GIT_EDITOR=true git PUSH"], SHADOWED);
   const PAGED = repo("paged", ["pager.push", "true"]);
   const CORRECTED = repo("corrected", ["help.autocorrect", "immediate"]);
   const UNCORRECTED = repo("uncorrected", ["help.autocorrect", "show"]);
