@@ -283,6 +283,7 @@
       "cocoapods"
       "fastlane"
       "openjdk@21" # Java toolchain for Android/Gradle builds
+      "bundletool" # reads Android App Bundles (manifest checks before a Play upload)
       "cameroncooke/axe/axe" # iOS simulator accessibility automation, for app tests
       "ffmpeg" # ffprobe, for video tests
       # gcloud-cli runs on these, but zap doesn't count a cask's formula dependencies and
