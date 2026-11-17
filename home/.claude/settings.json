@@ -43,7 +43,18 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Edit|Write|mcp__claude_ai_.*",
+        "matcher": "Bash|Monitor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.dotfiles/home/.claude/hooks/guard.mjs\" --fail-closed",
+            "timeout": 10,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|mcp__claude_ai_.*",
         "hooks": [
           {
             "type": "command",
