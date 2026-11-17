@@ -744,23 +744,29 @@ const RUNS_PROGRAM = new RegExp(
   "i",
 );
 // Config a push reads to choose what it sends and where: the remote and its url, refspecs
-// and mirror setting, url rewrites, push settings, and the branch's upstream. These are the
-// only sections git reads a push's destination and refspecs from, so a deny-list of them
-// leaves no unknown key that redirects a push. push.default may be current or simple, which
-// push the branch the repo is on. They're refused with every git command, not only a push:
-// git passes config given on its command line to each hook and program it runs, and one of
-// those (a post-commit hook that pushes) can push with it.
+// and mirror setting, url rewrites, push settings, and the branch's upstream. push.default
+// may be current or simple, which push the branch the repo is on. They're refused with every
+// git command, not only a push: git passes config given on its command line to each hook and
+// program it runs, and one of those (a post-commit hook that pushes) can push with it.
 const PUSH_CONFIG = /^(remote\..+|url\..+|push\.(?!(autosetupremote|followtags)$).+|branch\..+\.(merge|remote|pushremote))$/i;
+// http config, http.<url>.<key> included, also chooses where a push goes over http (a proxy,
+// curl's resolve list) and whether that host's certificate is checked, so it's refused on a
+// push except for the keys that tune speed and size. Off a push it passes, for a clone or
+// fetch through a proxy: a hook that pushes then gets it too. These two lists aren't every
+// way to steer a push: proxy variables such as https_proxy and the ssh client's own config
+// aren't checked.
+const HTTP_TRANSPORT = /^http\.(?!(.+\.)?(postbuffer|lowspeedlimit|lowspeedtime|maxrequests|version)$)/i;
 
 // Whether git run with key=value could run a program the guard can't read or change what a
-// push sends or where. value is undefined when the guard can't see it. Hooks may go to
-// /dev/null, which turns them off, and fsmonitor may be on or off (true starts git's own
-// daemon); a path is a hook it runs.
-function risky(key, value) {
+// push sends or where (push set when it could be a push). value is undefined when the guard
+// can't see it: then an http key counts as on a push. Hooks may go to /dev/null, which turns
+// them off, and fsmonitor may be on or off (true starts git's own daemon); a path is a hook
+// it runs.
+function risky(key, value, push) {
   if (/^core\.hookspath$/i.test(key)) return value !== "/dev/null";
   if (/^core\.fsmonitor$/i.test(key)) return !/^(true|false|yes|no|on|off|1|0|)$/i.test(value ?? "?");
   if (/^push\.default$/i.test(key)) return !["current", "simple"].includes(value);
-  return RUNS_PROGRAM.test(key) || PUSH_CONFIG.test(key);
+  return RUNS_PROGRAM.test(key) || PUSH_CONFIG.test(key) || (HTTP_TRANSPORT.test(key) && (push || value === undefined));
 }
 
 // Whether git's system config holds a key that steers a push, or an include, which could
@@ -805,7 +811,7 @@ function checkGitSettings(git, env, push) {
   const programs = [];
   for (const { key, value, what, own } of git.config) {
     if (own && COMMAND_KEYS.test(key)) programs.push({ what, value });
-    else if (risky(key, value)) redirects(what);
+    else if (risky(key, value, push)) redirects(what);
   }
   for (const name of env.exported) {
     if (!env.vars.has(name)) continue; // exported as it already was
@@ -1114,7 +1120,7 @@ function checkGitConfig(git) {
   if (sub === "rename-section" || sub === "edit") redirects(`git config ${sub}`);
   if (sub === null ? read || (!write && operands.length <= 1) : sub !== "set") return;
   const [key = "", value] = operands;
-  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value, true)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
 }
 
 // git's own commands. Any other is an alias, or a git-<name> program on PATH.

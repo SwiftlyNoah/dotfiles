@@ -896,6 +896,40 @@ describe("git push", () => {
     FEATURE,
   );
   at("pass", ["git -c core.pager='git push --force origin main' push origin feature", "GIT_PAGER=sh git push origin feature", "GIT_EDITOR=sh git push origin feature"], FEATURE);
+  // http config chooses which host gets a push (a proxy, curl's resolve list) and whether its
+  // certificate is checked, so on a push, written for later, or from a variable, only keys
+  // that tune speed and size pass. Off a push the rest pass too (2026-11-17: the guard passed
+  // all of these).
+  at(
+    "deny",
+    [
+      "git -c http.proxy=http://127.0.0.1:8080 -c http.sslVerify=false push origin feature",
+      "git -c http.sslVerify=false push origin feature",
+      "git -c http.curloptResolve=github.com:443:127.0.0.1 push origin feature",
+      "git -c http.sslCAInfo=/tmp/ca.pem -c http.proxy=http://127.0.0.1:8080 push origin feature",
+      "git -c http.https://github.com/.proxy=http://127.0.0.1:8080 push origin feature",
+      "git -c http.proxy=http://127.0.0.1:8080 rebase -x 'git push origin feature' HEAD~1",
+      "git --config-env http.proxy=P log",
+      "git config http.sslVerify false",
+      "git config http.proxy http://127.0.0.1:8080",
+      "git config set http.proxy http://127.0.0.1:8080",
+      "git config --global http.https://github.com/.sslVerify false",
+    ],
+    FEATURE,
+  );
+  at(
+    "pass",
+    [
+      "git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 push origin feature",
+      "git -c http.version=HTTP/1.1 -c http.maxRequests=2 push origin feature",
+      "git -c http.https://github.com/.postBuffer=524288000 push origin feature",
+      "git --config-env http.postBuffer=N push origin feature",
+      "git -c http.sslVerify=false fetch",
+      "git -c http.proxy=http://127.0.0.1:8080 clone https://example.invalid/r.git y",
+      "git config http.version HTTP/1.1",
+    ],
+    FEATURE,
+  );
   // On a push, config and environment that can change what it sends or where, or run code
   // while it runs, are refused, and so is config given to a command git runs (a pager, rebase
   // -x, an alias or a git-<name> program), which reaches the pushes it makes.
@@ -1156,7 +1190,7 @@ describe("git push", () => {
   at("pass", ["git st", "git status", "git psuh"], UNCORRECTED);
   at("pass", ["git status"], CORRECTED);
   // A shell alias gets the config given to git, and so do the pushes it makes.
-  at("deny", ["git -c remote.origin.push=+HEAD:refs/heads/main pu", "git -c url./tmp/x.insteadOf=origin pu"], ALIASED);
+  at("deny", ["git -c remote.origin.push=+HEAD:refs/heads/main pu", "git -c url./tmp/x.insteadOf=origin pu", "git -c http.proxy=http://127.0.0.1:8080 pu"], ALIASED);
   at("pass", ["git -c http.postBuffer=524288000 pu", "git pu"], ALIASED);
   // A push that pages starts its pager first, so what the pager does counts for the push;
   // one that doesn't never runs it.
