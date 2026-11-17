@@ -938,6 +938,48 @@ describe("git push", () => {
     ],
     FEATURE,
   );
+  // GIT_ variables that run a shell string have names with no telling shape, so only known
+  // harmless ones pass: GIT_TEST_FSMONITOR is the fsmonitor hook when core.fsmonitor is
+  // unset, git-difftool--helper evals GIT_DIFFTOOL_EXTCMD, and git maintenance runs the
+  // scheduler GIT_TEST_MAINT_SCHEDULER names.
+  at(
+    "deny",
+    [
+      "GIT_TEST_FSMONITOR='git push --force origin main #' git status",
+      "export GIT_TEST_FSMONITOR='git push --force origin main #'; git status",
+      "GIT_TEST_FSMONITOR=/tmp/hook git status",
+      "GIT_DIFFTOOL_EXTCMD='git push --force origin main;:' git difftool -y",
+      "GIT_MERGETOOL_EXTCMD=x git mergetool",
+      "GIT_TEST_MAINT_SCHEDULER='crontab:/tmp/p' git maintenance start --scheduler=crontab",
+      "GIT_ZZGUARD_UNKNOWN=1 git status",
+    ],
+    FEATURE,
+  );
+  // help.autocorrect runs the git command nearest a mistyped one, so it's refused like any
+  // config that runs a program, and help.format=web and help.browser start a browser.
+  at(
+    "deny",
+    [
+      "git -c help.autocorrect=immediate psuh --force origin main",
+      "git -c help.autocorrect=immediate psuh origin :main",
+      "git -c help.autocorrect=1 status",
+      "git config help.autocorrect immediate",
+      "git config help.autocorrect immediate; git psuh --force origin main",
+      "git -c help.browser=/tmp/b help -w push",
+    ],
+    FEATURE,
+  );
+  // git's options that take a value can take -P as that value, so the push still pages.
+  at(
+    "deny",
+    [
+      "git -p --shallow-file -P -c 'core.pager=git checkout -q main; cat' push --force origin HEAD",
+      "git -p --attr-source -P -c 'core.pager=git checkout -q main; cat' push --force origin HEAD",
+      "git -P -p -c 'core.pager=git checkout -q main; cat' push --force origin HEAD",
+    ],
+    FEATURE,
+  );
+  at("pass", ["git -p --no-pager -c 'core.pager=git checkout -q main; cat' push --force origin HEAD", "git --paginate -P -c core.pager=x push origin feature"], FEATURE);
   // A pager that switches the branch leaves it unknown to a later push, like any command that can.
   at("deny", ["git -c core.pager='git checkout main' log; git push --force"], FEATURE);
 
@@ -1022,6 +1064,8 @@ describe("git push", () => {
     ["alias.pu", "!git push origin"],
   );
   const PAGED = repo("paged", ["pager.push", "true"]);
+  const CORRECTED = repo("corrected", ["help.autocorrect", "immediate"]);
+  const UNCORRECTED = repo("uncorrected", ["help.autocorrect", "show"]);
   at("ask", ["git push origin", "git push", "git push -u origin"], REDIRECTED);
   at("pass", ["git push origin feature", "git status"], REDIRECTED);
   at("ask", ["git push backup", "git push"], MIRRORED);
@@ -1033,6 +1077,11 @@ describe("git push", () => {
   at("ask", ["git fp", "git sh", "git -C . fp", "git pf origin main", "git --no-pager fp"], ALIASED);
   at("deny", ["git rmall"], ALIASED);
   at("pass", ["git st", "git zzguardnone", "git pf origin feature", "git pf"], ALIASED);
+  // With help.autocorrect set, a command that's no alias may run as the git command nearest
+  // it, a push included, so the guard asks.
+  at("ask", ["git psuh --force origin main", "git psuh origin :main", "git zzguardnone"], CORRECTED);
+  at("pass", ["git st", "git status", "git psuh"], UNCORRECTED);
+  at("pass", ["git status"], CORRECTED);
   // A shell alias gets the config given to git, and so do the pushes it makes.
   at("deny", ["git -c remote.origin.push=+HEAD:refs/heads/main pu", "git -c url./tmp/x.insteadOf=origin pu"], ALIASED);
   at("pass", ["git -c http.postBuffer=524288000 pu", "git pu"], ALIASED);
