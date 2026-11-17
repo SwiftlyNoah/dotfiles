@@ -907,6 +907,48 @@ describe("git push", () => {
     ],
     FEATURE,
   );
+  // git config takes -t like --type, a short cluster that ends in f or t, and any unique
+  // abbreviation of a long option, so the guard reads git config's options by their exact
+  // names and judges every word a write is given as a key (2026-11-17: -t bool, -zf FILE,
+  // --typ and --comm moved the words, so the guard judged the value as the key, and
+  // --rename-sec turned a key no list names into http.proxy or remote.origin.pushurl).
+  at(
+    "deny",
+    [
+      "git config -t bool http.sslVerify false",
+      "git config set -t bool http.sslVerify false",
+      "git config --comm x http.proxy http://127.0.0.1:8080",
+      "git config --typ bool http.sslVerify false",
+      "git config -t bool-or-str core.editor sh",
+      "git config -t bool-or-str sequence.editor sh",
+      "git config -zf .git/config core.editor sh",
+      "git config -t bool-or-str core.hooksPath /tmp/h",
+      "git config -t bool-or-str include.path /tmp/x",
+      "git config -tbool http.sslVerify false",
+      "git config --fil .git/config core.pager sh",
+      "git config --type bool --bool-or-str x.y http.proxy http://127.0.0.1:8080",
+      "git config x.proxy http://127.0.0.1:8080; git config --rename-sec x http",
+      "git config z.q.pushurl /tmp/elsewhere; git config --rename-s z.q remote.origin",
+      "git config rename-section x http",
+      "git config --ed",
+      "git config -ze",
+    ],
+    FEATURE,
+  );
+  at(
+    "pass",
+    [
+      "git config --type=bool pull.rebase false",
+      "git config -t bool pull.rebase false",
+      "git config set --type bool --comment 'my choice' pull.rebase false",
+      "git config -f /tmp/x.cfg user.name x",
+      "git config --no-type user.name x",
+      "git config core.abbrev -1",
+      "git config -z --get-regexp '^alias'",
+      "git config get --all --show-origin user.email",
+    ],
+    FEATURE,
+  );
   at("pass", ["git -c core.pager='git push --force origin main' push origin feature", "GIT_PAGER=sh git push origin feature", "GIT_EDITOR=sh git push origin feature", "PAGER=sh EDITOR=sh VISUAL=sh git push origin feature"], FEATURE);
   at("pass", ["EDITOR=vim git commit", "VISUAL=nano git commit", "PAGER=cat git log", "PAGER=less git log"], FEATURE);
   // http config chooses which host gets a push or a fetch (a proxy, curl's resolve list) and

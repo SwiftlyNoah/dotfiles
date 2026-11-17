@@ -1102,7 +1102,17 @@ function checkPushConfig(git, env, forced, plain) {
 // on the command line, so that no later command (in this line or another) is redirected by
 // it or runs a program the guard can't read. A pager or editor written for later runs in
 // commands the guard won't connect to it, a push that pages included, so only the few safe
-// programs pass. Reading and removing are fine.
+// programs pass. Reading and removing are fine. git takes -t like --type, the value of -f or
+// -t as the rest of a short cluster or the next word, and any unique abbreviation of a long
+// option (--typ, --rename-sec, --ed), so the guard knows git config's options only by their
+// full names and refuses any other: one it misread would move the words, and the value would
+// be judged as the key. Every word a write is given is still judged as a key, with the word
+// after it as its value, so no other misreading can hide one.
+const CONFIG_VALUES = new Set(["file", "blob", "type", "default", "comment", "value", "url"]);
+const CONFIG_FLAGS = new Set(
+  "global system local worktree null name-only show-origin show-scope show-names bool int bool-or-int bool-or-str path expiry-date fixed-value includes all regexp append".split(" "),
+);
+const CONFIG_READS = new Set(["get", "get-all", "get-regexp", "get-urlmatch", "get-color", "get-colorbool", "list"]);
 function checkGitConfig(git) {
   const args = git.words.slice(git.at + 1).map((w) => one(w, git.state));
   if (args.includes(null)) redirects("git config with a word the guard can't read");
@@ -1111,18 +1121,34 @@ function checkGitConfig(git) {
   const operands = [];
   for (let k = 0; k < args.length; k++) {
     const a = args[k];
-    if (/^(-e|--edit|--rename-section)$/.test(a)) redirects(`git config ${a}`);
-    else if (/^--(unset|unset-all|remove-section)$/.test(a)) return;
-    else if (/^--(add|replace-all)$/.test(a)) write = true;
-    else if (/^(-l|--list|--get(-all|-regexp|-urlmatch|-color|-colorbool)?)$/.test(a)) read = true;
-    else if (/^(-f|--file|--blob|--type|--default|--comment|--value)$/.test(a)) k++;
-    else if (!a.startsWith("-")) operands.push(a);
+    // git reads "-" and a word such as -1 as an operand (a value can be negative).
+    if (!/^-[^\d]/.test(a)) operands.push(a);
+    else if (a === "--") operands.push(...args.splice(k + 1));
+    else if (a.startsWith("--")) {
+      const [name, given] = a.slice(2).split(/=(.*)/s);
+      const negated = name.replace(/^no-/, ""); // --no-file and the like take no value
+      if (CONFIG_VALUES.has(name)) k += given === undefined ? 1 : 0;
+      else if (given !== undefined || ["edit", "rename-section"].includes(name)) redirects(`git config ${a}`);
+      else if (["unset", "unset-all", "remove-section"].includes(name)) return;
+      else if (["add", "replace-all"].includes(name)) write = true;
+      else if (CONFIG_READS.has(name)) read = true;
+      else if (!CONFIG_FLAGS.has(negated) && !CONFIG_VALUES.has(negated)) redirects(`git config ${a}, which the guard doesn't know by that name,`);
+    } else
+      for (let c = 1; c < a.length; c++) {
+        if (a[c] === "l") read = true;
+        else if (a[c] === "f" || a[c] === "t") {
+          if (c === a.length - 1) k++;
+          break;
+        } else if (a[c] !== "z") redirects(`git config ${a}`);
+      }
   }
   const sub = ["get", "list", "set", "unset", "remove-section", "rename-section", "edit"].includes(operands[0]) ? operands.shift() : null;
   if (sub === "rename-section" || sub === "edit") redirects(`git config ${sub}`);
   if (sub === null ? read || (!write && operands.length <= 1) : sub !== "set") return;
-  const [key = "", value] = operands;
-  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+  operands.forEach((key, i) => {
+    const value = operands[i + 1];
+    if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+  });
 }
 
 // git's own commands. Any other is an alias, or a git-<name> program on PATH.
