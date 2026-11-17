@@ -401,7 +401,7 @@ function staleAfter(state, branchOnly = false) {
 
 // What git [-C dir]... <a branch query> prints, or null when the guard can't tell.
 function branchQuery(args, state) {
-  if (state.repo.stale || state.exported.has("GIT_DIR") || state.exported.has("GIT_WORK_TREE")) return null;
+  if (state.repo.stale || otherRepo(state)) return null;
   state.repo.read = true;
   let dir = state.cwd;
   let k = 0;
@@ -713,78 +713,123 @@ function gitArg(git, k, known = true) {
 const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source", "--shallow-file"];
 
 const redirects = (what) =>
-  deny(`${what} isn't on the guard's list of config that can't run a program or change where a push goes, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
+  deny(`${what} can run a program the guard can't read or change what a push sends and where, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
 
-// Config that can't run a program or change where a push goes, and so is safe to give git
-// on the command line or to write with git config: everything else is refused (a pager, an
-// ssh command, a diff or merge driver, a filter, a credential helper, fsmonitor, hooks, an
-// alias, an include, a url rewrite, a remote, the ext:: transport). push.default may be
-// current or simple, which push the branch the repo is on, a pager or editor one of a few
-// programs that do nothing else, and hooks only /dev/null, which turns them off. value is
-// undefined when the guard can't see it.
-const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less"]);
-const SAFE_KEYS = new RegExp(
+// Config whose value is a command git runs through the shell, a pager or an editor: it's
+// judged as that command, the way sh -c is.
+const COMMAND_KEYS = /^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i;
+const COMMAND_ENV = /^GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)$/;
+
+// Config that makes git run a program the guard can't read (hooks, an ssh command, a
+// credential helper or askpass, an fsmonitor hook, a diff or merge driver, a filter, gpg, a
+// template folder's hooks, the ext:: transport), or that brings in config it can't see (an
+// include, or an alias, which checkAlias looks up in git's config and can't find here). It's
+// refused for every git command, push or not: the program could itself force push main or
+// delete files, and the guard checks every command something runs. Matched by section and by
+// the names git gives such keys, so one git adds later in that shape is refused too.
+const RUNS_PROGRAM = new RegExp(
   `^(${[
-    String.raw`user\.[^.]+`,
-    String.raw`color\..+`,
-    String.raw`advice\.[^.]+`,
-    String.raw`(commit|tag)\.gpgsign`,
-    String.raw`init\.defaultbranch`,
-    String.raw`core\.(quotepath|autocrlf|safecrlf|eol|filemode|ignorecase|precomposeunicode|symlinks|whitespace|abbrev|untrackedcache|preloadindex|longpaths|commentchar|commentstring)`,
-    String.raw`safe\.directory`,
-    String.raw`protocol\.(file|git|http|https|ssh)\.allow`,
-    String.raw`pull\.(rebase|ff)`,
-    String.raw`push\.(autosetupremote|followtags)`,
-    String.raw`rebase\.(autostash|autosquash|stat|missingcommitscheck|abbreviatecommands)`,
-    String.raw`merge\.(conflictstyle|ff|log|stat|renames|autostash|verbosity)`,
-    String.raw`diff\.(noprefix|mnemonicprefix|renames|renamelimit|algorithm|colormoved|colormovedws|context|interhunkcontext|indentheuristic|relative|statgraphwidth|submodule|ignoresubmodules|suppressblankempty|wserrorhighlight)`,
-    String.raw`fetch\.(prune|prunetags|parallel|writecommitgraph)`,
-    String.raw`gc\.(auto|autodetach|autopacklimit)`,
-    String.raw`log\.[^.]+`,
-    String.raw`status\.[^.]+`,
-    String.raw`branch\.(autosetupmerge|autosetuprebase|sort)`,
+    String.raw`(alias|include|includeif|credential|filter|gpg|hook|sendemail|difftool|mergetool|guitool|man|browser|web|instaweb)\..+`,
+    String.raw`protocol\.(?!(version|(file|git|http|https|ssh)\.allow)$).+`,
+    String.raw`core\.(hookspath|askpass|gitproxy)|init\.templatedir|interactive\.difffilter|diff\.external|imap\.tunnel`,
+    String.raw`submodule\..+\.update|remote\..+\.(uploadpack|receivepack|vcs)|lfs\.(customtransfer|extension)\..+`,
+    String.raw`(?!advice\.|color\.).+\.[^.]*(cmd|command|program|helper|driver|textconv|clean|smudge|process|hooks?)`,
   ].join("|")})$`,
   "i",
 );
-function safeConfig(key, value) {
-  if (SAFE_KEYS.test(key)) return true;
-  if (/^push\.default$/i.test(key)) return ["current", "simple"].includes(value);
-  if (/^core\.hookspath$/i.test(key)) return value === "/dev/null";
-  if (/^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i.test(key)) return SAFE_PROGRAMS.has(value);
-  return false;
+// Config a push reads to choose what it sends and where: the remote and its url, refspecs
+// and mirror setting, url rewrites, push settings, and the branch's upstream. These are the
+// only sections git reads a push's destination and refspecs from, so a deny-list of them
+// leaves no unknown key that redirects a push. push.default may be current or simple, which
+// push the branch the repo is on.
+const PUSH_CONFIG = /^(remote\..+|url\..+|push\.(?!(autosetupremote|followtags)$).+|branch\..+\.(merge|remote|pushremote))$/i;
+
+// Whether git run with key=value could run a program the guard can't read or, for a git
+// command that could push (push set), change what the push sends or where. value is
+// undefined when the guard can't see it. Hooks may go to /dev/null, which turns them off,
+// and fsmonitor may be on or off (true starts git's own daemon); a path is a hook it runs.
+function risky(key, value, push) {
+  if (/^core\.hookspath$/i.test(key)) return value !== "/dev/null";
+  if (/^core\.fsmonitor$/i.test(key)) return !/^(true|false|yes|no|on|off|1|0|)$/i.test(value ?? "?");
+  if (/^push\.default$/i.test(key)) return push && !["current", "simple"].includes(value);
+  return RUNS_PROGRAM.test(key) || (push && PUSH_CONFIG.test(key));
 }
 
-// git -c key[=value] (a bare key is true) and git --config-env key=VARIABLE.
-function checkConfig(option, value) {
-  const [key, setting] = value === null ? [null] : value.split(/=(.*)/s);
-  const ok = key !== null && (option === "-c" ? safeConfig(key, setting ?? "true") : setting !== undefined && safeConfig(key, undefined));
-  if (!ok) redirects(`git ${option} ${value ?? "with a value the guard can't work out"}`);
+// git's environment from this line. GIT_ variables that run a program or choose a config
+// file are refused for every command (GIT_CONFIG_NOSYSTEM only leaves the system file out),
+// and so are HOME and XDG_CONFIG_HOME other than as they already are, since they choose git's
+// own config file, which can hold an alias, a pager or hooks. For a push, the config files,
+// the namespace and anything named for a push are refused too. GIT_DIR, GIT_WORK_TREE and
+// GIT_COMMON_DIR make the repo unknown instead, which refuses what depends on it.
+const RUNS_ENV = /^GIT_(\w*(SSH|EXEC|ASK|PROXY|EXTERNAL|TEMPLATE|HOOK|COMMAND|PROGRAM|HELPER|VIEWER)\w*|CONFIG(?!_NOSYSTEM$)\w*|ALLOW_PROTOCOL)$/;
+const PUSH_ENV = /^GIT_(CONFIG\w*|\w*PUSH\w*|NAMESPACE)$/;
+const otherRepo = (env) => ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"].some((name) => env.exported.has(name));
+
+// What a command git runs (a pager, rebase -x, an alias) inherits: git's environment, and
+// the config given to git, which git passes on to every git it starts.
+const gitChild = (git, env) => ({ ...copy(env), gitConfig: git.config.map((c) => ({ ...c, own: false })) });
+
+// The command a pager or editor setting runs, checked as typed, unless it's one of a few
+// programs that do nothing else. It runs once: what it runs doesn't page through it again.
+const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less"]);
+function checkCommandValue({ what, value }, git, env) {
+  if (SAFE_PROGRAMS.has(value)) return;
+  const inner = { ...gitChild(git, env), cwd: null };
+  for (const name of inner.exported) if (COMMAND_ENV.test(name)) inner.exported.delete(name);
+  checkString([{ text: value, quoted: true }], what, git.state, inner);
 }
 
-// What git's environment may hold from this line: GIT_ variables that can't run a program
-// or choose a config file (GIT_DIR and GIT_WORK_TREE make the repo unknown instead), a
-// pager or editor from the safe few, and HOME and XDG_CONFIG_HOME only as they already are.
-// GIT_TRACE and its kin write what git does to stderr or a file.
-const SAFE_GIT_ENV =
-  /^GIT_(DIR|WORK_TREE|INDEX_FILE|(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|FLUSH|PROGRESS_DELAY|ADVICE|TRACE\w*|CURL_VERBOSE|REDACT_COOKIES|MERGE_VERBOSITY)$/;
-function checkGitEnv(env) {
+// The config and environment git runs with, judged for a push when it could be one: config
+// given on its command line (own), and config passed on by a git that started this one,
+// whose pager or editor was checked there. Returns the commands its pager and editor run.
+function checkGitSettings(git, env, push) {
+  const commands = [];
+  for (const { key, value, what, own } of git.config) {
+    const command = own && COMMAND_KEYS.test(key);
+    if (command ? value === undefined : risky(key, value, push)) redirects(what);
+    if (command) commands.push({ what, value });
+  }
   for (const name of env.exported) {
     if (!env.vars.has(name)) continue; // exported as it already was
     const values = env.vars.get(name);
-    const program = /^GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)$/.test(name) && values?.every((v) => SAFE_PROGRAMS.has(v));
+    const what = `${name} in git's environment`;
     const kept = !["HOME", "XDG_CONFIG_HOME"].includes(name) || values?.every((v) => v === (name === "HOME" ? HOME : process.env.XDG_CONFIG_HOME));
-    if ((name.startsWith("GIT_") && !SAFE_GIT_ENV.test(name) && !program) || !kept) redirects(`${name} in git's environment`);
+    if (COMMAND_ENV.test(name) && values) commands.push(...values.map((value) => ({ what, value })));
+    else if (COMMAND_ENV.test(name) || RUNS_ENV.test(name) || (push && PUSH_ENV.test(name)) || !kept) redirects(what);
+  }
+  return commands;
+}
+
+// Whether git pages this push, and so starts its pager before the push reads anything: with
+// -p or --paginate before the command (and no -P or --no-pager after it), or with
+// pager.<command> on, given to git or in its config. One the guard can't look up pages.
+function pagesPush(git, env) {
+  let pages = null;
+  for (const arg of git.words.slice(1, git.at).map((w) => one(w, git.state)))
+    if (arg === "-p" || arg === "--paginate") pages = true;
+    else if (arg === "-P" || arg === "--no-pager") pages = false;
+  if (pages !== null) return pages;
+  const key = `pager.${git.command}`;
+  const given = git.config.findLast((c) => c.key.toLowerCase() === key);
+  if (given) return given.value === undefined || !/^(false|no|off|0)$/i.test(given.value);
+  const dir = pushRepo(git, env);
+  if (dir === null) return true;
+  try {
+    const value = gitConfig(dir, ["--get", key]).trim();
+    return value !== "" && !/^(false|no|off|0)$/i.test(value);
+  } catch {
+    return true;
   }
 }
 
 // git [options] <command> [args], read the way git reads it: its own options as
-// { name, value } (value null when the guard can't work it out), and the command and its
-// index (command null when there's none, or when git.unread stopped the reading before
-// it). env is what git runs with. git finds its own commands by their exact name, and an
-// alias (alias set when the command could be one) or a git-<name> program in any case.
+// { name, value } (value null when the guard can't work it out), the config it runs with
+// as { key, value, what, own }, and the command and its index (command null when there's
+// none, or when git.unread stopped the reading before it). env is what git runs with. git
+// finds its own commands by their exact name, and an alias (alias set when the command
+// could be one) or a git-<name> program in any case.
 function gitCommand(words, state, env) {
-  checkGitEnv(env);
-  const git = { words, state, options: [], command: null, at: words.length, unread: null, alias: false };
+  const git = { words, state, options: [], config: [...(env.gitConfig ?? [])], command: null, at: words.length, unread: null, alias: false };
   const stop = (at, command = null) => Object.assign(git, { at, command: command?.toLowerCase() ?? null, alias: command !== null && !GIT_BUILTINS.has(command) });
   for (let k = 1; k < words.length; k++) {
     const arg = gitArg(git, k);
@@ -796,7 +841,13 @@ function gitCommand(words, state, env) {
     if (!GIT_VALUES.includes(name)) continue;
     if (eq === -1 && ++k === words.length) break;
     const value = eq === -1 ? gitArg(git, k, false) : arg.slice(eq + 1);
-    if (name === "-c" || name === "--config-env") checkConfig(name, value);
+    if (name === "-c" || name === "--config-env") {
+      // git -c key[=value] (a bare key is true), and git --config-env key=VARIABLE.
+      const what = `git ${name} ${value ?? "with a value the guard can't work out"}`;
+      const [key, setting] = value === null ? [null] : value.split(/=(.*)/s);
+      if (key === null || (name === "--config-env" && setting === undefined)) redirects(what);
+      git.config.push({ key, value: name === "-c" ? (setting ?? "true") : undefined, what, own: true });
+    }
     if (git.unread) return stop(k);
     git.options.push({ name, value });
   }
@@ -854,7 +905,7 @@ function currentBranch(dir, state) {
 // The folder git works in, or null when the guard can't pin it down: after a cd it
 // couldn't follow, with a -C it can't work out, or with the repo named some other way.
 function gitFolder(options, state, env) {
-  if (env.exported.has("GIT_DIR") || env.exported.has("GIT_WORK_TREE")) return null;
+  if (otherRepo(env)) return null;
   let dir = state.cwd;
   for (const { name, value } of options) {
     if (name === "--git-dir" || name === "--work-tree") return null;
@@ -1015,8 +1066,11 @@ function checkPushConfig(git, env, forced, plain) {
   }
 }
 
-// git config that writes a key, other than one safeConfig allows, is refused, so that no
-// later command (in this line or another) is redirected by it. Reading and removing are fine.
+// git config that writes a key is judged as if every later git command were a push given it
+// on the command line, so that no later command (in this line or another) is redirected by
+// it or runs a program the guard can't read. A pager or editor written for later runs in
+// commands the guard won't connect to it, a push that pages included, so only the few safe
+// programs pass. Reading and removing are fine.
 function checkGitConfig(git) {
   const args = git.words.slice(git.at + 1).map((w) => one(w, git.state));
   if (args.includes(null)) redirects("git config with a word the guard can't read");
@@ -1036,7 +1090,7 @@ function checkGitConfig(git) {
   if (sub === "rename-section" || sub === "edit") redirects(`git config ${sub}`);
   if (sub === null ? read || (!write && operands.length <= 1) : sub !== "set") return;
   const [key = "", value] = operands;
-  if (!safeConfig(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value, true)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
 }
 
 // git's own commands. Any other is an alias, or a git-<name> program on PATH.
@@ -1060,7 +1114,9 @@ function checkAlias(git, env) {
   if (!alias) return;
   const args = argvLine(git.words.slice(git.at + 1), git.state);
   const options = git.words.slice(1, git.at).map((w) => quote(single(w, git.state)));
-  checkLine(alias.startsWith("!") ? `${alias.slice(1)} ${args}` : ["git", ...options, alias, args].join(" "), copy(env));
+  // A git alias is given git's options again; a shell one gets git's config from git.
+  if (alias.startsWith("!")) checkLine(`${alias.slice(1)} ${args}`, gitChild(git, env));
+  else checkLine(["git", ...options, alias, args].join(" "), copy(env));
 }
 
 // What git runs for you: rebase's -x or --exec, submodule foreach and bisect run. Where it
@@ -1068,7 +1124,7 @@ function checkAlias(git, env) {
 function checkGitRuns(git, env) {
   const args = git.words.slice(git.at + 1);
   const strings = args.map((w) => single(w, git.state));
-  const inner = { ...copy(env), cwd: null };
+  const inner = { ...gitChild(git, env), cwd: null };
   const what = `git ${git.command}`;
   if (git.command === "rebase")
     for (let k = 0; k < args.length && strings[k] !== "--"; k++) {
@@ -1155,8 +1211,16 @@ function checkGit(words, strings, state, env) {
     strings = ["git", own, ...strings.slice(1)];
   } else if (commandName(strings[0]) !== "git") return false;
   const git = gitCommand(words, state, env);
-  // A word the guard can't read before the command could be the push itself.
-  if (PUSHES.has(git.command) || git.unread) checkGitPush(git, env);
+  // A word the guard can't read before the command could be the push itself, and so could
+  // an alias or a git-<name> program, which gets git's config.
+  const push = PUSHES.has(git.command);
+  const commands = checkGitSettings(git, env, push || git.unread !== null || git.alias);
+  // What a pager or editor runs counts for what git does after it starts, but a push only
+  // pages when told to and never starts an editor: then it counts for later commands only.
+  const later = push && commands.length > 0 && !pagesPush(git, env);
+  if (!later) for (const command of commands) checkCommandValue(command, git, env);
+  if (push || git.unread) checkGitPush(git, env);
+  if (later) for (const command of commands) checkCommandValue(command, git, env);
   if (git.unread || git.command === null) return false;
   if (git.command === "config") checkGitConfig(git);
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))

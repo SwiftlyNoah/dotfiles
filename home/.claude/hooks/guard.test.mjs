@@ -713,32 +713,29 @@ describe("git push", () => {
   );
   at("ask", ["git -c push.default=simple push --force", "git -c push.default=current push --force"], MAIN);
 
-  // Only a short list of config is safe to set for one command: anything else could run a
-  // program (a pager, an ssh command, fsmonitor, hooks) or send a push somewhere else. The
-  // same goes for git's environment, where HOME and XDG_CONFIG_HOME choose its config file,
-  // for set -a exporting what follows, and for git config writing such keys for later.
+  // Config that runs a program the guard can't read (an ssh command, fsmonitor, hooks) is
+  // refused for any command, and so is config that sends a push somewhere else. The same goes
+  // for git's environment, where HOME and XDG_CONFIG_HOME choose its config file, for set -a
+  // exporting what follows, and for git config writing such keys for later. A pager or an
+  // editor is judged as the command it runs.
   at(
     "deny",
     [
       "git -c 'core.fsmonitor=git push --force origin main #' status",
-      "git -c core.pager='git push --force origin main;:' log",
-      "git -c core.pager='diskutil eraseDisk APFS X disk9' log",
       "git -c core.sshCommand='git push --force origin main' fetch",
       "git -c core.hooksPath=/tmp/h commit -m x",
       "git -c push.default=matching push origin",
       "git --config-env core.pager=P log",
       "git --config-env=user.name log",
       "git -c $K=1 log",
-      "GIT_PAGER='git push --force origin main' git log",
       "GIT_SSH_COMMAND='git push --force origin main' git fetch",
       "GIT_EXEC_PATH=/tmp/x git push origin",
-      "GIT_EDITOR='git push --force origin main' git commit",
       "git --exec-path=/tmp/x push origin",
       "HOME=/tmp/h git push origin",
       "XDG_CONFIG_HOME=/tmp/x git push origin",
       "export HOME=/tmp/h; git push origin",
       "set -a; GIT_CONFIG_COUNT=1; GIT_CONFIG_KEY_0=remote.origin.push; GIT_CONFIG_VALUE_0=+HEAD:refs/heads/main; git push origin",
-      "set -o allexport; GIT_PAGER=x; git log",
+      "set -o allexport; GIT_SSH_COMMAND=x; git fetch",
       "set -ea; HOME=/tmp/h; git push origin",
       "git config remote.origin.push +HEAD:refs/heads/main && git push origin",
       "git config alias.fp 'push --force origin main' && git fp",
@@ -746,6 +743,8 @@ describe("git push", () => {
       "git config set remote.origin.mirror true",
       "git config --add include.path /tmp/x",
       "git config core.pager 'git push --force origin main'",
+      "git config core.pager 'diskutil eraseDisk APFS X disk9'",
+      "git config pager.push x",
       "git config --rename-section x remote.origin",
       "git config --edit",
       "git config $K $V",
@@ -774,7 +773,7 @@ describe("git push", () => {
       "git config get alias.p",
       "git config --get-regexp '^alias'",
       "git config --unset remote.origin.push",
-      "set -a; set +a; GIT_PAGER=x; git log",
+      "set -a; set +a; GIT_SSH_COMMAND=x; git fetch",
       "git --exec-path",
     ],
     FEATURE,
@@ -830,11 +829,117 @@ describe("git push", () => {
       "git -c protocol.ext.allow=always fetch 'ext::sh -c x'",
       "git -c protocol.allow=always fetch",
       "git -c core.hooksPath=/tmp/hooks commit -m x",
-      "git -c sequence.editor=x rebase -i HEAD~2",
       "GIT_EXTERNAL_DIFF=x git diff",
     ],
     FEATURE,
   );
+
+  // Config and git's environment that can't run a program or change a push pass with any
+  // command, a push included (2026-11-16: the guard refused all of these, which main allowed).
+  at(
+    "pass",
+    [
+      "GIT_LFS_SKIP_SMUDGE=1 git clone /tmp/x y",
+      "GIT_CONFIG_NOSYSTEM=1 git log",
+      "git -c core.fsmonitor=false status",
+      "git -c core.fsmonitor status",
+      "git -c http.postBuffer=524288000 push origin feature",
+      "git -c http.postBuffer=524288000 fetch",
+      "git -c submodule.recurse=true pull",
+      "git -c submodule.recurse=true push origin feature",
+      "git -c fetch.recurseSubmodules=false fetch",
+      "git -c maintenance.auto=false fetch",
+      "git -c maintenance.auto=false push --force origin feature",
+      "git -c core.fsmonitor=false push origin feature",
+      "git -c core.pager=x push origin feature",
+      "git -c core.pager='less -R' log",
+      "git -c pager.log=false log",
+      "git -c sequence.editor=x rebase -i HEAD~2",
+      "GIT_PAGER=x git log",
+      "GIT_PAGER='git log' git log",
+      "GIT_EDITOR=vim git commit",
+      "git config core.pager less",
+      "git config http.postBuffer 524288000",
+      "git -c advice.ignoredHook=false commit -m x",
+      "git -c url.git@github.com:.insteadOf=https://github.com/ clone https://github.com/x/y",
+      "git -c remote.origin.url=/tmp/x fetch",
+      "GIT_INDEX_FILE=/tmp/i git add x",
+    ],
+    FEATURE,
+  );
+  // A pager or editor runs the command it names, which is judged as if typed.
+  at(
+    "ask",
+    [
+      "git -c core.pager='git push --force origin main;:' log",
+      "git -c core.pager='git push --force origin main' push origin feature",
+      "git -c pager.push='git push --force origin main' push origin feature",
+      "GIT_PAGER='git push --force origin main' git log",
+      "GIT_EDITOR='git push --force origin main' git commit",
+      "git -c core.pager='diskutil eraseDisk APFS X disk9' log",
+    ],
+    FEATURE,
+  );
+  // On a push, config and environment that can change what it sends or where, or run code
+  // while it runs, are refused, and so is config given to a command git runs (a pager, rebase
+  // -x, an alias or a git-<name> program), which reaches the pushes it makes.
+  at(
+    "deny",
+    [
+      "git -c url./tmp/elsewhere.insteadOf=origin push origin feature",
+      "git -c remote.pushDefault=backup push",
+      "git -c branch.feature.merge=refs/heads/main push --force origin feature",
+      "git -c branch.feature.remote=backup push origin feature",
+      "git -c branch.feature.pushRemote=backup push origin feature",
+      "git -c push.recurseSubmodules=on-demand push origin feature",
+      "git -c core.sshCommand=ssh push origin feature",
+      "git -c core.askPass=/tmp/a push origin feature",
+      "git -c credential.helper=/tmp/h push origin feature",
+      "git -c core.hooksPath=/tmp/h push origin feature",
+      "git -c core.fsmonitor=/tmp/hook push origin feature",
+      "git -c protocol.ext.allow=always push origin feature",
+      "git -c gpg.program=/tmp/g push --signed origin feature",
+      "GIT_SSH=/tmp/s git push origin feature",
+      "GIT_SSH_COMMAND=ssh git push origin feature",
+      "GIT_ASKPASS=/tmp/a git push origin feature",
+      "GIT_CONFIG_NOSYSTEM=1 git push origin feature",
+      "GIT_CONFIG_GLOBAL=/tmp/c git push origin feature",
+      "GIT_NAMESPACE=x git push origin feature",
+      "GIT_PUSH_OPTION_COUNT=1 git push origin feature",
+      "GIT_COMMON_DIR=/tmp/x git push --force origin HEAD",
+      "git -c remote.origin.push=+HEAD:refs/heads/main st",
+      "git -c remote.origin.push=+HEAD:refs/heads/main rebase -x 'git push origin' HEAD~1",
+      "git -c remote.origin.push=+HEAD:refs/heads/main -c core.pager='git push origin' log",
+      "git -c remote.origin.push=+HEAD:refs/heads/main submodule foreach git push origin",
+      "GIT_CONFIG_NOSYSTEM=1 git rebase -x 'git push origin feature' HEAD~1",
+    ],
+    FEATURE,
+  );
+  // Config that runs a program the guard can't read stays refused for every command.
+  at(
+    "deny",
+    [
+      "git -c core.fsmonitor=/tmp/hook status",
+      "git -c alias.st='!git push -f origin main' st",
+      "git -c lfs.customtransfer.x.path=/tmp/p fetch",
+      "git -c submodule.x.update='!git push -f origin main' submodule update",
+      "git -c remote.origin.uploadpack='git push -f origin main #' fetch",
+      "git -c uploadpack.packObjectsHook=x fetch",
+      "git -c hook.x.command=x commit -m x",
+      "git -c trailer.x.cmd=x commit -m x",
+      "git -c core.alternateRefsCommand=x fetch",
+      "GIT_SSH_COMMAND=ssh git fetch",
+      "GIT_ASKPASS=/tmp/a git fetch",
+      "GIT_CONFIG_GLOBAL=/tmp/c git log",
+      "GIT_CONFIG_PARAMETERS=x git log",
+      "GIT_TEMPLATE_DIR=/tmp/t git clone /tmp/x y",
+      "GIT_ALLOW_PROTOCOL=ext git fetch",
+      "git config http.postBuffer 1 && git config core.sshCommand x",
+    ],
+    FEATURE,
+  );
+  // A pager that switches the branch leaves it unknown to a later push, like any command that can.
+  at("deny", ["git -c core.pager='git checkout main' log; git push --force"], FEATURE);
 
   // A word whose value the guard can't work out could be push, --force or +main, and an
   // unquoted one could split or vanish and move every word after it. In a push that forces
@@ -914,7 +1019,9 @@ describe("git push", () => {
     ["alias.pf", "push --force"],
     ["alias.st", "status"],
     ["alias.rmall", "!rm -rf ~/Documents"],
+    ["alias.pu", "!git push origin"],
   );
+  const PAGED = repo("paged", ["pager.push", "true"]);
   at("ask", ["git push origin", "git push", "git push -u origin"], REDIRECTED);
   at("pass", ["git push origin feature", "git status"], REDIRECTED);
   at("ask", ["git push backup", "git push"], MIRRORED);
@@ -926,6 +1033,16 @@ describe("git push", () => {
   at("ask", ["git fp", "git sh", "git -C . fp", "git pf origin main", "git --no-pager fp"], ALIASED);
   at("deny", ["git rmall"], ALIASED);
   at("pass", ["git st", "git zzguardnone", "git pf origin feature", "git pf"], ALIASED);
+  // A shell alias gets the config given to git, and so do the pushes it makes.
+  at("deny", ["git -c remote.origin.push=+HEAD:refs/heads/main pu", "git -c url./tmp/x.insteadOf=origin pu"], ALIASED);
+  at("pass", ["git -c http.postBuffer=524288000 pu", "git pu"], ALIASED);
+  // A push that pages starts its pager first, so what the pager does counts for the push;
+  // one that doesn't never runs it.
+  at("deny", ["git -c core.pager='git checkout main' push --force origin HEAD"], PAGED);
+  at("ask", ["git -c core.pager=x push origin feature"], PAGED);
+  at("pass", ["git -c core.pager=less push origin feature", "git -c core.pager=x -c pager.push=false push origin feature"], PAGED);
+  at("deny", ["git -p -c core.pager='git checkout main' push --force origin HEAD", "git -c pager.push -c core.pager='git checkout main' push --force origin HEAD"], FEATURE);
+  at("pass", ["git -c core.pager='git checkout main' push --force origin HEAD", "git -p -P -c core.pager=x push origin feature"], FEATURE);
   at("ask", ["cd $R && git fp", "cd $R && git push"]);
   at("ask", [`B=$(git -C ${MAIN} branch --show-current); git push --force origin $B`]);
   at("pass", [`B=$(git -C ${FEATURE} branch --show-current); git push --force origin $B`]);
@@ -1118,7 +1235,7 @@ describe("git push", () => {
     assert.match(reason("git push --force origin $(echo +main)", FEATURE), /can't tell what git does with \$\(echo \+main\).*Write it out literally/);
     assert.match(reason('git push origin "$BRANCH"', FEATURE), /git push with \$BRANCH, which the guard can't read/);
     assert.match(reason("X=; git -C push $X push --force", FEATURE), /could split into several words, vanish or match files.*Quote it \("\$X"\)/);
-    assert.match(reason("git -c remote.origin.push=+HEAD:main push", FEATURE), /git -c remote\.origin\.push=\+HEAD:main isn't on the guard's list of config .* Leave it out/);
+    assert.match(reason("git -c remote.origin.push=+HEAD:main push", FEATURE), /git -c remote\.origin\.push=\+HEAD:main can run a program the guard can't read or change what a push sends and where.* Leave it out/);
   });
 });
 
