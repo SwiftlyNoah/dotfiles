@@ -158,13 +158,18 @@ function commandsIn(text) {
   return found;
 }
 
+// zsh's (e) parameter flag, as in ${(e)X}, anywhere in text: it runs the substitutions in
+// the value. Returns what to name in a question, or undefined.
+const evalFlag = (text) => /\$\{\([^)]*e[^)]*\)[^}]*\}?/.exec(text)?.[0];
+
 // Reads the expansion at the "$" at i: returns [part, index of its last character]. A part
-// can carry nested: the commands its operator or arithmetic runs.
+// can carry nested: the commands its operator or arithmetic runs; and runs: code it runs
+// that the guard can't read.
 function dollar(s, i, quoted) {
   const next = s[i + 1];
   if (next === "(") {
     const close = closeBracket(s, i + 1, "(", ")");
-    if (s[i + 2] === "(") return [{ sub: null, nested: commandsIn(s.slice(i + 3, close)), quoted }, close];
+    if (s[i + 2] === "(") return [{ sub: null, nested: commandsIn(s.slice(i + 3, close)), quoted, runs: evalFlag(s.slice(i + 3, close)) }, close];
     return [{ sub: s.slice(i + 2, close), quoted }, close];
   }
   if (next === "{") {
@@ -172,9 +177,8 @@ function dollar(s, i, quoted) {
     const body = s.slice(i + 2, close);
     const m = /^([A-Za-z_]\w*|\d+|[@*#?$!-])([\s\S]*)$/.exec(body);
     const nested = commandsIn(m ? m[2] : body);
-    // zsh's (e) flag, as in ${(e)X}, runs the substitutions in the value.
-    const runs = /^\([^)]*e/.test(body) ? `\${${body}}` : undefined;
-    return [m ? { name: m[1], op: m[2], quoted, nested } : { sub: null, nested, quoted, runs }, close];
+    const runs = evalFlag(`\${${body}}`);
+    return [m ? { name: m[1], op: m[2], quoted, nested, runs } : { sub: null, nested, quoted, runs }, close];
   }
   if (!quoted && next === "'") {
     let j = i + 2;
@@ -304,10 +308,14 @@ function parse(line) {
         streamNext = true;
       } else redirect = op;
     } else if (c === "(" && word !== null && !/^=?$|=$/.test(literal(word) ?? "x") && line[i + 1] !== ")") {
-      // A group glued to a word is part of it: a zsh glob qualifier or alternation (*(.), *(e:...:)).
+      // A group glued to a word is part of it: a zsh glob alternation, or qualifiers when it
+      // ends the word and holds no unquoted | or ( (or starts with #q). Their e:...: and
+      // +name run code.
       const close = closeBracket(line, i, "(", ")");
       const inner = line.slice(i + 1, close);
-      const runs = /^#q|e[^\w\s]|\+/.test(inner) ? `the glob qualifier (${inner})` : undefined;
+      const bare = inner.replace(/\\[\s\S]|'[^']*'|"(?:\\[\s\S]|[^"\\])*"/g, "");
+      const qualifiers = (/^$|[\s;&|<>)]/.test(line[close + 1] ?? "") && !/[|(]/.test(bare)) || inner.startsWith("#q");
+      const runs = qualifiers && /e[^\w\s]|\+/.test(inner) ? `the glob qualifier (${inner})` : undefined;
       word.push({ text: `(${inner})`, quoted: false, nested: commandsIn(inner), runs });
       i = close;
     } else if (c === "\n") {
@@ -657,7 +665,7 @@ function one(word, state) {
 // Every value a word could take, when whichever it takes is sure to be exactly one argument;
 // else null.
 function choices(word, state) {
-  if (braced(word) || word.some((p) => !p.quoted && "text" in p && /[*?[]/.test(p.text))) return null;
+  if (braced(word) || globbed(word)) return null;
   let values;
   try {
     values = expand(word, state);
@@ -666,18 +674,22 @@ function choices(word, state) {
     throw e;
   }
   const loose = word.some((p) => !p.quoted && !("text" in p));
-  return loose && values.some((v) => !/\S/.test(v) || /[\s*?[]/.test(v)) ? null : values;
+  return loose && values.some((v) => !/\S/.test(v) || /\s/.test(v) || GLOB.test(v)) ? null : values;
 }
+
+// A glob: *, ?, or a [ with a ] after it ([ and [[ alone are no glob).
+const GLOB = /[*?]|\[[\s\S]*\]/;
+const globbed = (word) => GLOB.test(word.map((p) => (!p.quoted && "text" in p ? p.text : " ")).join(""));
 
 // Whether a word is sure to reach the command as exactly one argument: nothing unquoted in
 // it can split into several, vanish or match files.
 function oneArg(word, state) {
   if (braced(word)) return false;
   const loose = word.filter((p) => !p.quoted);
-  if (loose.some((p) => "text" in p && /[*?[]/.test(p.text))) return false;
+  if (globbed(word)) return false;
   if (loose.every((p) => "text" in p)) return true;
   const value = one(word, state);
-  return value !== null && /\S/.test(value) && !/[*?[]/.test(value);
+  return value !== null && /\S/.test(value) && !GLOB.test(value);
 }
 
 const unknownGit = (what, fix) =>
@@ -1240,11 +1252,12 @@ function checkWords(cmd, state) {
 // A wrapper (sudo, env, nice...) runs the command after its options, and after the words
 // it takes first (timeout's duration). An option can take the next word as its value
 // (nice -n 5 rm, env -u NAME rm), so the first word after the options is judged both as
-// the command and as a value, with the command after it. When an option could change the
+// the command and as a value, with the command after it (carried keeps what the options
+// before it set, even when that word is a wrapper's name too). When an option could change the
 // working folder (env -C, sudo -D) it isn't known. env -S splits its value into the
 // command, and sudo -s or -i hands the command to a shell, as watch always does and flock
 // does with -c. xargs and parallel add words from their input, which the guard can't see.
-function checkRun(cmd, words, state, child) {
+function checkRun(cmd, words, state, child, carried = {}) {
   const value = one(words[0], state);
   if (value === null || !oneArg(words[0], state)) return checkUnread(cmd, words, state, child);
   // zsh runs =git as the git on PATH.
@@ -1255,8 +1268,8 @@ function checkRun(cmd, words, state, child) {
   // an assignment there changes nothing for the commands after it.
   if (!SHELL_WRAPPERS.has(value)) state = copy(state);
   let k = 1;
-  let chdir = false;
-  let shell = wrapper === "watch";
+  let chdir = carried.chdir ?? false;
+  let shell = carried.shell || wrapper === "watch";
   let replace = false; // the string xargs replaces with its input, null when unknown
   let taken = -1; // where the last xargs option that holds its own value was
   for (; k < words.length; k++) {
@@ -1276,9 +1289,11 @@ function checkRun(cmd, words, state, child) {
       deny("env -S reads backslashes its own way (\\_ splits words), so the guard can't check the command it runs. Write the command out without env -S and run it again.");
     checkLine([split[3], ...words.slice(k + 1).map((w) => single(w, state))].join(" "), copy(child));
   }
-  if (k === words.length) return;
   const moved = (s) => ({ ...copy(s), cwd: chdir ? null : s.cwd });
-  if (k > 1 && taken !== k - 1 && one(words[k - 1], state)?.startsWith("-")) checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child));
+  // sudo -s or -i with no command runs a shell on what comes in on stdin.
+  if (k + WRAPPERS.get(wrapper) >= words.length && shell && wrapper === "sudo") checkShellInput(cmd, "sudo -s", state, moved(child), true);
+  if (k === words.length) return;
+  if (k > 1 && taken !== k - 1 && one(words[k - 1], state)?.startsWith("-")) checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child), { chdir, shell });
   let run = words.slice(k + WRAPPERS.get(wrapper));
   if (!run.length) return;
   if (wrapper === "flock" && /^(-c|--command)$/.test(one(run[0], state) ?? "")) return checkString(run[1], "flock -c", state, moved(child));
@@ -1396,10 +1411,20 @@ function globRegex(pattern, flags = "") {
 // could split could hold a whole command, so it's asked about. That judging doesn't nest: a
 // second such word inside it is asked about. A push after it is judged as a git push, in a
 // repo the guard can't name.
+// Each of those readings is judged on its own copy of the state, and the folder and the
+// variables any of them could change are unknown after it.
 let reading = false;
 function checkUnread(cmd, words, state, child) {
   const [first, ...rest] = words;
-  if (rest.length) checkRun(cmd, rest, state, child);
+  const maybe = (run) => {
+    const s = copy(state);
+    checkRun(cmd, run, s, child);
+    if (s.cwd !== state.cwd) state.cwd = null;
+    for (const [name, values] of s.vars) if (state.vars.get(name) !== values) state.vars.set(name, null);
+    for (const name of s.exported) state.exported.add(name);
+    state.allexport ||= s.allexport;
+  };
+  if (rest.length) maybe(rest);
   let values = null;
   try {
     values = expand(first, state);
@@ -1408,7 +1433,7 @@ function checkUnread(cmd, words, state, child) {
   }
   for (const v of values ?? []) {
     const pieces = v.split(/\s+/).filter(Boolean);
-    if (pieces.length) checkRun(cmd, [...pieces.map((t) => [{ text: t, quoted: true }]), ...rest], state, child);
+    if (pieces.length) maybe([...pieces.map((t) => [{ text: t, quoted: true }]), ...rest]);
   }
   // The name the command could have: after the last "/", where an unread part could hold one.
   const name = first.reduce((tail, p) => ("text" in p ? tail + p.text : "*").replace(/^.*\//s, ""), "");
@@ -1420,7 +1445,7 @@ function checkUnread(cmd, words, state, child) {
   else if (names.length) {
     reading = true;
     try {
-      for (const n of names) checkRun(cmd, [[{ text: n, quoted: true }], ...rest], state, child);
+      for (const n of names) maybe([[{ text: n, quoted: true }], ...rest]);
     } finally {
       reading = false;
     }
@@ -1491,6 +1516,17 @@ const argvLine = (words, state) => words.map((w) => (one(w, state) === null ? ra
 // Commands that print code to set up a shell, for eval to run.
 const SETUP =
   /^\s*(?:[\w./-]*\/)?(?:brew shellenv|ssh-agent(?: -[sc])?|direnv (?:export|hook) \w+|(?:rbenv|pyenv|nodenv|zoxide|starship|mise) (?:init|activate|env)(?: -)?(?: \w+)?|fnm env(?: --[\w-]+)*|opam env)\s*$/;
+
+// A shell given no command string checks its here-documents and here-strings as what it
+// runs, and when it reads stdin (stdin) asks about a pipe or process substitution feeding
+// it. Returns whether anything was checked.
+function checkShellInput(cmd, name, state, inherited, stdin) {
+  for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
+  for (const word of cmd.herestrings) checkString(word, `${name} <<<`, state, inherited);
+  const fed = cmd.heredocs.length + cmd.herestrings.length > 0;
+  if (stdin && cmd.streamed && !fed) ask(`${name} runs what it reads from a pipe or a process substitution, which the guard can't read`);
+  return fed;
+}
 
 // A command's own checks, from its name on. child is what it runs with.
 function checkCommand(cmd, words, state, child) {
@@ -1565,15 +1601,9 @@ function checkCommand(cmd, words, state, child) {
   if (SHELLS.has(name) || name === "su") {
     const inherited = { ...child, vars: new Map([...child.vars].filter(([k]) => child.exported.has(k))) };
     const { c, stdin } = name === "su" ? { c: suString(words, strings), stdin: true } : shellString(words, strings);
-    const fed = cmd.heredocs.length + cmd.herestrings.length > 0;
     if (c !== undefined) checkString(c, `${name} -c`, state, inherited);
-    else {
-      for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
-      for (const word of cmd.herestrings) checkString(word, `${name} <<<`, state, inherited);
-      if (stdin && cmd.streamed && !fed) ask(`${name} runs what it reads from a pipe or a process substitution, which the guard can't read`);
-    }
     // What runs there was checked, and marked the branch unknown if it could change it.
-    readOnly = c !== undefined || fed;
+    readOnly = c !== undefined || checkShellInput(cmd, name, state, inherited, stdin);
   }
   if ((builtin === "source" || builtin === ".") && cmd.streamed) ask(`${builtin} runs what it reads from a process substitution, which the guard can't read`);
   if (name === "eval") {

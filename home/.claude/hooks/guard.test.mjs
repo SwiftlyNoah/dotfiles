@@ -507,7 +507,7 @@ cases("ask", [
   "echo x | xargs -J % git push -f origin main",
 ]);
 cases("deny", ["echo x | xargs -I{} git push -f origin {}", "echo x | xargs -I{} rm -rf ~/{}", "ls | xargs -I{} rm -rf /tmp/x/{}"]);
-cases("pass", ["ls | xargs -I{} cp {} /tmp/x/", "ls | xargs -I % echo moved %"]);
+cases("pass", ["ls | xargs -I{} cp {} /tmp/x/", "ls | xargs -I % echo moved %", "echo x | xargs -I{} sh -c 'git push -f origin feature'"]);
 // A push that doesn't force is asked about, never refused, for a branch it can't read.
 cases("ask", ["ls | xargs -I{} git push origin {}"]);
 
@@ -551,7 +551,8 @@ cases("ask", [
   "/USR/BIN/G?T push -f origin main",
   "git PUSH -f origin main",
 ]);
-for (const command of ["/usr/bin/cd /tmp && rm -rf Documents", "CD /tmp && rm -rf Documents", "env cd /tmp && rm -rf Documents", "sudo cd /tmp; rm -rf Documents"])
+// A command word the guard can't read could be cd, or a program that changes nothing, so the folder is unknown after it.
+for (const command of ["/usr/bin/cd /tmp && rm -rf Documents", "CD /tmp && rm -rf Documents", "env cd /tmp && rm -rf Documents", "sudo cd /tmp; rm -rf Documents", '"$X" cd /tmp; rm -rf Documents'])
   test(`deny from my home folder: ${command}`, () => assert.equal(decision(command, { cwd: HOME }), "deny"));
 test("pass from my home folder: cd /tmp && rm -rf Documents", () => assert.equal(decision("cd /tmp && rm -rf Documents", { cwd: HOME }), "pass"));
 
@@ -569,6 +570,7 @@ cases("ask", [
   "source <(echo 'git push -f origin main')",
   "bash < <(echo 'git push -f origin main')",
 ]);
+cases("ask", ["echo 'git push -f origin main' | sudo -s", "echo x | sudo -s -u root", "sudo -s -u root 'git push -f origin main'","echo 'git push -f origin main' | sudo -i", "sudo -s <<< 'git push -f origin main'", "echo 'git push -f origin main' | su"]);
 cases("deny", ["bash <<< 'rm -rf $U'", "X=~/Documents; sh <<< \"rm -rf $X\""]);
 cases("pass", ["echo hi | grep h", "echo hi | sh -c 'cat'", "bash <<< 'echo ok'", "test -f x || sh setup.sh", "false || zsh -c 'echo hi'", "cat <<< hi"]);
 
@@ -586,11 +588,16 @@ cases("ask", [
   "print -l **/*(#qe:'diskutil eraseDisk APFS X disk9':)",
   "X='$(git push --force origin main)'; echo ${(e)X}",
   "echo ${(e)X}",
+  "echo ${${(e)X}}",
+  'echo "$(( ${(e)X} ))"',
+  "echo ${Y:-${(e)X}}",
+  "ls *(e:'true | git push --force origin main':)",
+  "ls /t(mp|xx)(e:'git push --force origin main':)",
   "alias g=git\ng push --force origin main",
   "alias -g G='| sh'; echo x G",
 ]);
 cases("deny", ["repeat 2 rm -rf $U", 'X=~/Documents; if [[ -n x ]] rm -rf "$X"']);
-cases("pass", ["ls *(.om[1])", "ls -d *(/)", "repeat 3 echo hi", "if [[ -n x ]] echo hi", "[[ -f x ]] && echo hi", "f() { echo hi; }; f", "echo ${(U)X}", "arr=(a b c); echo $arr", "alias", "alias ll"]);
+cases("pass", ["ls *(.om[1])", "ls -d *(/)", "[[ $b =~ ^(feature|fix) ]] && echo ok", "ls /t(mp|xx)", "ls *(e:print\\ x|cat:)", "repeat 3 echo hi", "if [[ -n x ]] echo hi", "[[ -f x ]] && echo hi", "f() { echo hi; }; f", "echo ${(U)X}", "arr=(a b c); echo $arr", "alias", "alias ll"]);
 cases("ask", ["arr=($(git push --force origin main))"]);
 
 // A link made earlier in the line can send rm -r anywhere, and rm through a link ending in a
