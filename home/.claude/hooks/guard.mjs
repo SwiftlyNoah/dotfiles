@@ -74,7 +74,12 @@ const WRAPPERS = new Map(
     ...{ chronic: 0, unbuffer: 0, parallel: 0 },
   }),
 );
+// The wrappers that are part of the shell itself, so the command they run runs in it.
+const SHELL_WRAPPERS = new Set(["command", "builtin", "exec", "noglob", "nocorrect", "-", "time"]);
 const DECLARE = new Set(["export", "declare", "local", "readonly", "typeset"]);
+// The name a program is run by. APFS ignores case, so RM and Git run rm and git; the shell's
+// own builtins and keywords do mind case, and are matched as written.
+const commandName = (path) => basename(path).toLowerCase();
 const MAX_VALUES = 64;
 const MAX_DEPTH = 8;
 const now = () => performance.now(); // ms since the process started
@@ -167,7 +172,9 @@ function dollar(s, i, quoted) {
     const body = s.slice(i + 2, close);
     const m = /^([A-Za-z_]\w*|\d+|[@*#?$!-])([\s\S]*)$/.exec(body);
     const nested = commandsIn(m ? m[2] : body);
-    return [m ? { name: m[1], op: m[2], quoted, nested } : { sub: null, nested, quoted }, close];
+    // zsh's (e) flag, as in ${(e)X}, runs the substitutions in the value.
+    const runs = /^\([^)]*e/.test(body) ? `\${${body}}` : undefined;
+    return [m ? { name: m[1], op: m[2], quoted, nested } : { sub: null, nested, quoted, runs }, close];
   }
   if (!quoted && next === "'") {
     let j = i + 2;
@@ -198,13 +205,19 @@ function ansiC(body) {
   return text.split("\0")[0];
 }
 
+// A simple command also keeps its redirection targets (redirects), those it writes to
+// (writes) and its here-strings, and notes whether a pipe or a process substitution feeds
+// it (streamed).
+const command = () => ({ words: [], heredocs: [], redirects: [], writes: [], herestrings: [], streamed: false });
+
 function parse(line) {
   const items = [];
-  let cmd = { words: [], heredocs: [], redirects: [] };
+  let cmd = command();
   let word = null;
-  let redirect = false; // the next word is a redirection target, not an argument
+  let redirect = null; // the operator whose target the next word is, not an argument
   let heredocNext = null; // the next word is a here-document delimiter
   let pending = []; // here-documents whose bodies start after the next newline
+  let streamNext = false; // the next command reads a process substitution's stream
 
   const add = (part) => {
     word ??= [];
@@ -221,15 +234,21 @@ function parse(line) {
       heredocNext = null;
     } else if (redirect) {
       cmd.redirects.push(word);
-      redirect = false;
+      if (redirect === "<<<") cmd.herestrings.push(word);
+      else if (redirect.includes(">")) cmd.writes.push(word);
+      redirect = null;
     } else cmd.words.push(word);
     word = null;
   };
-  const endCmd = () => {
+  // A pipe feeds the command after it, through a subshell or a { group.
+  const endCmd = (piped = false) => {
     endWord();
-    if (cmd.words.length || cmd.redirects.length) items.push(cmd);
-    cmd = { words: [], heredocs: [], redirects: [] };
-    redirect = false;
+    const empty = !cmd.words.length && !cmd.redirects.length;
+    if (!empty) items.push(cmd);
+    piped ||= empty && cmd.streamed;
+    cmd = command();
+    cmd.streamed = piped;
+    redirect = null;
   };
 
   for (let i = 0; i < line.length; i++) {
@@ -274,11 +293,23 @@ function parse(line) {
       if (strip) i++;
       heredocNext = { strip };
     } else if (c === ">" || c === "<" || (c === "&" && line[i + 1] === ">")) {
-      // 2>&1, >>file, &>file, <<<word: drop the operator and its target.
+      // 2>&1, >>file, &>file, <<<word: the operator and its target are no argument.
       if (word?.length === 1 && !word[0].quoted && /^\d+$/.test(word[0].text ?? "")) word = null;
       else endWord();
-      while (/[<>&|]/.test(line[i + 1] ?? "")) i++;
-      redirect = true;
+      let op = c;
+      while (/[<>&|]/.test(line[i + 1] ?? "")) op += line[++i];
+      // <(...) and >(...) run a command whose output or input is a stream: what's inside is a subshell.
+      if (line[i + 1] === "(" && /^[<>]$/.test(op)) {
+        cmd.streamed = true;
+        streamNext = true;
+      } else redirect = op;
+    } else if (c === "(" && word !== null && !/^=?$|=$/.test(literal(word) ?? "x") && line[i + 1] !== ")") {
+      // A group glued to a word is part of it: a zsh glob qualifier or alternation (*(.), *(e:...:)).
+      const close = closeBracket(line, i, "(", ")");
+      const inner = line.slice(i + 1, close);
+      const runs = /^#q|e[^\w\s]|\+/.test(inner) ? `the glob qualifier (${inner})` : undefined;
+      word.push({ text: `(${inner})`, quoted: false, nested: commandsIn(inner), runs });
+      i = close;
     } else if (c === "\n") {
       endCmd();
       let j = i + 1;
@@ -293,10 +324,21 @@ function parse(line) {
       }
       i = j - 1;
       pending = [];
-    } else if (c === ";" || c === "&" || c === "|") {
+    } else if (c === "|" && line[i + 1] === "|") {
+      i++;
+      endCmd();
+    } else if (c === "|") {
+      if (line[i + 1] === "&") i++;
+      endCmd(true);
+    } else if (c === ";" || c === "&") {
       endCmd();
     } else if (c === "(" || c === ")") {
-      endCmd();
+      // zsh's =(...) is a process substitution too.
+      const stream = c === "(" && (streamNext || literal(word ?? []) === "=");
+      if (literal(word ?? []) === "=") word = null;
+      if (stream) cmd.streamed = true;
+      endCmd(stream);
+      streamNext = false;
       items.push(c);
     } else if (/\s/.test(c)) {
       endWord();
@@ -339,11 +381,14 @@ const branches = new Map(); // what each query printed, by folder and query
 
 // git answers for the repo as it is before the line runs. After a command that could have
 // switched a branch (anything but a few read-only ones), that answer is out of date, and
-// the line's branch is unknown. A loop runs its body again after its last command, so a
-// line with one is checked a second time from the start when that happened after an answer.
-function staleAfter(state) {
+// the line's branch is unknown (stale). Unless it was one of git's own commands that only
+// switch, git's config and refs are unknown too (changed). A loop runs its body again after
+// its last command, so a line with one is checked a second time from the start when that
+// happened after an answer.
+function staleAfter(state, branchOnly = false) {
   state.repo.staleAfterRead ||= state.repo.read;
   state.repo.stale = true;
+  state.repo.changed ||= !branchOnly;
 }
 
 // What git [-C dir]... <a branch query> prints, or null when the guard can't tell.
@@ -380,7 +425,7 @@ function substitute(inner, state) {
   if (name === "pwd" && state.cwd) return [state.cwd];
   const path = name === "mktemp" ? mktemp(args, state.cwd) : null;
   if (path) return [path];
-  const branch = basename(name) === "git" ? branchQuery(args, state) : null;
+  const branch = commandName(name) === "git" ? branchQuery(args, state) : null;
   if (branch !== null) return [branch];
   throw new Unresolved(what);
 }
@@ -535,9 +580,22 @@ function assign(state, word, exported) {
 // ---------------------------------------------------------------------------------------
 // Checks.
 
-const top = (p) => p === "/" || p === HOME;
-const underTemp = (p) => TEMP_ROOTS.some((root) => p.startsWith(`${root}/`));
-const atOrUnderTemp = (p) => TEMP_ROOTS.some((root) => p === root || p.startsWith(`${root}/`));
+// Paths compared the way APFS compares them, ignoring case.
+const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+const under = (p, root) => p.toLowerCase().startsWith(`${root.toLowerCase()}/`);
+const top = (p) => p === "/" || same(p, HOME);
+const underTemp = (p) => TEMP_ROOTS.some((root) => under(p, root));
+const atOrUnderTemp = (p) => TEMP_ROOTS.some((root) => same(p, root) || under(p, root));
+
+// The path with every link on the way followed, as far as it exists.
+function real(p) {
+  try {
+    return realpathSync(p);
+  } catch {
+    const up = dirname(p);
+    return up === p ? p : join(real(up), basename(p));
+  }
+}
 
 function unresolvedRm(target, what) {
   deny(
@@ -557,6 +615,8 @@ function checkRm(words, state) {
     } else targets.push(word);
   }
   if (!recursive) return;
+  if (targets.length && state.disk.linked)
+    deny(`can't tell what rm -r ${raw(targets[0])} would remove, because a link made earlier in this command could lead it anywhere. Run the rm as a command of its own.`);
   for (const word of targets) {
     let values;
     try {
@@ -572,8 +632,13 @@ function checkRm(words, state) {
       const glob = prefix !== value;
       if (!isAbsolute(prefix) && !state.cwd) unresolvedRm(raw(word), "the folder it runs in (after a cd, env -C or the like)");
       const path = resolve(state.cwd ?? "/", prefix || ".");
-      if (glob ? atOrUnderTemp(prefix === "" || prefix.endsWith("/") ? path : dirname(path)) : underTemp(path)) continue;
-      if (top(path) || top(dirname(path))) deny(`rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}`);
+      // rm follows a link in the folders on the way, and the last one too when the path ends
+      // in "/" or a glob starts inside it: judge the path both as written and as followed.
+      const inside = glob ? prefix === "" || prefix.endsWith("/") : value.endsWith("/");
+      for (const p of new Set([path, inside ? real(path) : join(real(dirname(path)), basename(path))])) {
+        if (glob ? atOrUnderTemp(inside ? p : dirname(p)) : underTemp(p)) continue;
+        if (top(p) || top(dirname(p))) deny(`rm -r ${raw(word)}${raw(word) === value ? "" : ` (${value})`}${p === path ? "" : `, which leads to ${p}`}`);
+      }
     }
   }
 }
@@ -703,11 +768,12 @@ function checkGitEnv(env) {
 // git [options] <command> [args], read the way git reads it: its own options as
 // { name, value } (value null when the guard can't work it out), and the command and its
 // index (command null when there's none, or when git.unread stopped the reading before
-// it). env is what git runs with.
+// it). env is what git runs with. git finds its own commands by their exact name, and an
+// alias (alias set when the command could be one) or a git-<name> program in any case.
 function gitCommand(words, state, env) {
   checkGitEnv(env);
-  const git = { words, state, options: [], command: null, at: words.length, unread: null };
-  const stop = (at, command = null) => Object.assign(git, { at, command });
+  const git = { words, state, options: [], command: null, at: words.length, unread: null, alias: false };
+  const stop = (at, command = null) => Object.assign(git, { at, command: command?.toLowerCase() ?? null, alias: command !== null && !GIT_BUILTINS.has(command) });
   for (let k = 1; k < words.length; k++) {
     const arg = gitArg(git, k);
     if (git.unread) return stop(k);
@@ -847,44 +913,93 @@ function checkGitPush(git, env) {
     if (split) unknownGit(`what git gets from ${word}, which could split into several words, vanish or match files`, `Quote it ("${word}")`);
     unknownGit(`what git does with ${word}`, "Write it out literally");
   }
-  const config = !refspecs.length && !every;
-  if (!forced) {
-    if (config) checkPushConfig(git, env, false);
-    return;
-  }
+  // A branch named alone (no colon) goes where git's config maps it, and so does a push with none.
+  const plain = refspecs.filter((r) => !r.includes(":"));
+  const config = !every && (!refspecs.length || plain.length > 0);
+  if (!forced) return config ? checkPushConfig(git, env, false, plain) : undefined;
   if (every || refspecs.includes(":")) return ask("force push of every branch, main included");
 
-  // Where each refspec lands. Without one, or with HEAD, that's the branch the repo is on.
+  // Where each refspec lands. Without one, or with HEAD, that's the branch the repo is on;
+  // a branch named alone that's a link to another (a symref) lands on that one.
   const targets = refspecs.map((r) => r.split(":").at(-1));
+  const named = targets.find(protectedRef);
+  if (named) return ask(`force push to ${named}`);
   if (!targets.length || targets.some((t) => t === "HEAD" || t === "@")) {
     const dir = gitFolder(git.options, state, env);
     if (dir === null) unknownPush("which repo this force push runs in");
     targets.push(currentBranch(dir, state));
   }
-  // git finds a short name like heads/main under refs/ on the remote.
-  const protectedBranch = targets.find((t) => /(^|\/)(main|master)$/.test(t) || t.includes("*"));
+  for (const r of plain) if (r !== "HEAD" && r !== "@") targets.push(linkTarget(git, env, r));
+  const protectedBranch = targets.find(protectedRef);
   if (protectedBranch) return ask(`force push to ${protectedBranch}`);
-  if (config) checkPushConfig(git, env, true);
+  if (config) checkPushConfig(git, env, true, plain);
 }
 
-// With no refspec, git's config says where a push goes and whether it forces: a remote's
-// push refspec or mirror setting, and push.default (only current and simple push just the
-// branch the repo is on). A push that doesn't force and can't be looked up is asked about.
-function checkPushConfig(git, env, forced) {
-  const unknown = (what) => (forced ? unknownPush(what) : ask(`git push with no branch named, and the guard can't tell ${what}`));
+// git finds a short name like heads/main under refs/ on the remote.
+const protectedRef = (ref) => /(^|\/)(main|master)$/.test(ref) || ref.includes("*");
+
+// The folder of the repo whose config and refs git reads for this push, as the guard can
+// still see them: null after an earlier command in the line could have changed them, or
+// when it can't tell which repo it is.
+function pushRepo(git, env) {
+  if (git.state.repo.changed) return null;
   const dir = gitFolder(git.options, git.state, env);
-  if (dir === null) return unknown("which repo this push runs in");
+  if (dir !== null) git.state.repo.read = true;
+  return dir;
+}
+const unseen = (git) => (git.state.repo.changed ? "after the commands before it in this line" : "since it can't tell which repo this runs in");
+
+// The ref a branch named in a force push stands for: the branch it links to, for a symref.
+// A name git can't find is pushed as written, or not at all.
+function linkTarget(git, env, ref) {
+  const dir = pushRepo(git, env);
+  if (dir === null) unknownGit(`where ${ref} points ${unseen(git)}`, "Run the push as a command of its own, from the repo's folder or with git -C <folder>,");
+  try {
+    return runGit(dir, ["rev-parse", "--symbolic-full-name", "--end-of-options", ref]).trim() || ref;
+  } catch (e) {
+    if (e.status) return ref;
+    unknownPush(`where ${ref} points (${e.message})`);
+  }
+}
+
+// Where a remote's push refspec sends ref, or undefined when it doesn't name it. git looks
+// it up by its full name; a short one is taken too, to be safe.
+function mapped(refspec, ref) {
+  const [src, dst = src] = refspec.replace(/^\+/, "").split(":");
+  const [head, tail] = src.split("*");
+  for (const name of [ref, `refs/${ref}`, `refs/heads/${ref}`]) {
+    if (tail === undefined && name === src) return dst;
+    if (tail !== undefined && name.length >= head.length + tail.length && name.startsWith(head) && name.endsWith(tail))
+      return dst.replace("*", name.slice(head.length, name.length - tail.length));
+  }
+}
+
+// git's config can send a push somewhere else and force it. With no refspec: a remote's push
+// refspec or mirror setting, and push.default (only current and simple push just the branch
+// the repo is on). For a branch named alone (plain): a remote's push refspec that maps it,
+// or for a force push with push.default upstream, the branch it tracks. A force push whose
+// config can't be read is refused, and any other asked about.
+function checkPushConfig(git, env, forced, plain) {
+  const unknown = (what) => (forced ? unknownPush(what) : ask(`git push, and the guard can't tell ${what}, so it could be a force push to main or master`));
+  const dir = pushRepo(git, env);
+  if (dir === null) return unknown(`where git's config sends it ${unseen(git)}`);
   let config;
   try {
-    config = gitConfig(dir, ["--get-regexp", String.raw`^(remote\..*\.(push|mirror)|push\.default)$`]);
+    config = gitConfig(dir, ["--get-regexp", String.raw`^(remote\..*\.(push|mirror)|push\.default|branch\..*\.merge)$`]);
   } catch (e) {
-    return unknown(`where git's config sends this push (${e.message})`);
+    return unknown(`where git's config sends it (${e.message})`);
   }
-  for (const line of config.split("\n").filter(Boolean)) {
-    const [key, value = ""] = line.split(/ (.*)/s);
-    if (/\.mirror$/i.test(key) && /^(true|yes|on|1)$/i.test(value)) return ask(`git push with ${key} set, which force pushes every branch, main included`);
-    if (/\.push$/i.test(key) && (forced || /^[+:]/.test(value))) return ask(`git push with ${key} ${value} set, which can force push to main or master`);
-    if (/^push\.default$/i.test(key) && forced && !["current", "simple"].includes(value)) return ask(`force push with push.default ${value}, which can push to main or master`);
+  const settings = config.split("\n").filter(Boolean).map((line) => line.split(/ (.*)/s));
+  const upstream = settings.some(([key, value]) => /^push\.default$/i.test(key) && value === "upstream");
+  for (const [key, value = ""] of settings) {
+    const forces = forced || /^[+:]/.test(value);
+    if (plain.length) {
+      const tracks = forced && upstream && plain.some((b) => key === `branch.${b.replace(/^(refs\/)?heads\//, "")}.merge`);
+      const lands = /\.push$/i.test(key) ? plain.map((b) => mapped(value, b)).find((d) => d !== undefined) : tracks ? value : undefined;
+      if (lands !== undefined && forces && protectedRef(lands)) return ask(`git push with ${key} ${value} set, which sends it to ${lands}`);
+    } else if (/\.mirror$/i.test(key) && /^(true|yes|on|1)$/i.test(value)) return ask(`git push with ${key} set, which force pushes every branch, main included`);
+    else if (/\.push$/i.test(key) && forces) return ask(`git push with ${key} ${value} set, which can force push to main or master`);
+    else if (/^push\.default$/i.test(key) && forced && !["current", "simple"].includes(value)) return ask(`force push with push.default ${value}, which can push to main or master`);
   }
 }
 
@@ -922,8 +1037,8 @@ const quote = (s) => `'${s.replaceAll("'", String.raw`'\''`)}'`;
 // it starts with !, else a git command. One the guard can't look up is asked about.
 function checkAlias(git, env) {
   const what = `git ${git.command}, which could be an alias the guard`;
-  const dir = gitFolder(git.options, git.state, env);
-  if (dir === null) return ask(`${what} can't look up, since it can't tell which repo this runs in`);
+  const dir = pushRepo(git, env);
+  if (dir === null) return ask(`${what} can't look up ${unseen(git)}`);
   let alias;
   try {
     alias = gitConfig(dir, ["--get", `alias.${git.command}`]).replace(/\n$/, "");
@@ -960,7 +1075,9 @@ function checkGitRuns(git, env) {
 }
 
 // gh api can move or delete a branch without git: a call that writes to main or master, or
-// to a branch the guard can't read, asks. gh sends GET unless told otherwise or given fields.
+// to a branch the guard can't read, asks, and so does one that deletes a repo. gh sends GET
+// unless told otherwise or given fields. A path is read the way gh and GitHub read it: as
+// a URL, maybe a full one, without its query or fragment, with escapes decoded.
 function checkGhApi(strings) {
   let method = null;
   let fields = false;
@@ -969,9 +1086,18 @@ function checkGhApi(strings) {
     if (m) method = m[1] ?? strings[++k] ?? "";
     fields ||= /^(-[fF]|--field|--raw-field|--input)/.test(strings[k] ?? "");
   }
-  if ((method ?? (fields ? "POST" : "GET")).toUpperCase() === "GET") return;
-  const ref = strings.map((s) => /^\/?repos\/[^/]+\/[^/]+\/git\/refs\/heads\/(.*)$/.exec(s)?.[1]).find((r) => r !== undefined);
+  method = (method ?? (fields ? "POST" : "GET")).toUpperCase();
+  if (method === "GET") return;
+  const paths = strings.slice(2).map((s) => {
+    try {
+      return decodeURIComponent(new URL(s.replace(/^\/+/, ""), "https://api.github.com/").pathname).replace(/\/+/g, "/");
+    } catch {
+      return s;
+    }
+  });
+  const ref = paths.map((p) => /\/repos\/[^/]+\/[^/]+\/git\/refs\/heads\/(.*)$/.exec(p)?.[1]).find((r) => r !== undefined);
   if (ref !== undefined && /^(main|master)\/?$|[$`*]/.test(ref)) ask(`changing or deleting the ${ref} branch through the GitHub API`);
+  if (method === "DELETE" && paths.some((p) => /\/repos\/[^/]+\/[^/]+\/?$/.test(p))) ask("deleting a GitHub repo");
   if (strings.includes("graphql") && strings.some((s) => /\b(deleteRef|updateRefs?)\b/.test(s))) ask("changing or deleting a branch through the GitHub API");
 }
 
@@ -982,7 +1108,7 @@ function checkGhApi(strings) {
 const KEEPS_BRANCH = new Set(
   "status log diff show add commit fetch push send-pack http-push config rev-parse ls-files ls-remote grep blame describe shortlog cat-file ls-tree for-each-ref show-ref merge-base rev-list pull merge reset cherry-pick revert tag rm mv restore apply am clean stash".split(" "),
 );
-const READ_ONLY = new Set(["echo", "printf", "true", "false", ":", "test", "[", "[[", "ls", "cat", "pwd", "sleep", "date", "which", "type", "grep", "head", "tail", "wc", "sort", "uniq", "jq"]);
+const READ_ONLY = new Set(["echo", "printf", "true", "false", ":", "test", "[", "[[", "ls", "cat", "pwd", "sleep", "date", "which", "type", "grep", "head", "tail", "wc", "jq"]);
 
 function keepsBranch(git) {
   const args = git.words.slice(git.at + 1).map((w) => single(w, git.state));
@@ -993,8 +1119,8 @@ function keepsBranch(git) {
       return args.every((a) => a.startsWith("-") && !/^(-[a-zA-Z]*[mMcC]|--(move|copy))/.test(a));
     case "symbolic-ref":
       return operands() <= 1;
-    case "checkout":
-      return args.includes("--");
+    case "checkout": // git checkout main -- with no path after it still switches
+      return args.indexOf("--") !== -1 && args.indexOf("--") < args.length - 1;
     case "stash":
       return args[0] !== "branch";
     case "rebase":
@@ -1004,14 +1130,18 @@ function keepsBranch(git) {
   }
 }
 
-// Returns whether the command was a git command that leaves the branch alone.
+// git commands that can switch the branch but leave git's config and refs alone.
+const ONLY_SWITCH = new Set(["checkout", "switch", "rebase", "stash"]);
+
+// Returns true for a git command that leaves the branch alone, "branch" for one that can
+// only switch it, and false for anything else.
 function checkGit(words, strings, state, env) {
   // git-core's git-push and the rest are git with that command.
-  const own = /^git-(.+)$/.exec(basename(strings[0]))?.[1];
+  const own = /^git-(.+)$/.exec(commandName(strings[0]))?.[1];
   if (GIT_BUILTINS.has(own)) {
     words = [[{ text: "git", quoted: true }], [{ text: own, quoted: true }], ...words.slice(1)];
     strings = ["git", own, ...strings.slice(1)];
-  } else if (basename(strings[0]) !== "git") return false;
+  } else if (commandName(strings[0]) !== "git") return false;
   const git = gitCommand(words, state, env);
   // A word the guard can't read before the command could be the push itself.
   if (PUSHES.has(git.command) || git.unread) checkGitPush(git, env);
@@ -1019,9 +1149,9 @@ function checkGit(words, strings, state, env) {
   if (git.command === "config") checkGitConfig(git);
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
     deny("git remote --mirror makes every later push to that remote a force push of every branch, main included. Leave it out and run it again.");
-  if (!GIT_BUILTINS.has(git.command)) checkAlias(git, env);
+  if (git.alias) checkAlias(git, env);
   checkGitRuns(git, env);
-  return keepsBranch(git);
+  return keepsBranch(git) || (!git.alias && ONLY_SWITCH.has(git.command) && "branch");
 }
 
 // Whether a path, or a glob, could name the claude-pool key: in any case, and through a link
@@ -1036,7 +1166,16 @@ function namesPoolKey(path, follow) {
   }
 }
 
+// Where a redirection can write without touching a file git reads.
+const HARMLESS = /^(\d+|-|\/dev\/(null|stdout|stderr|tty|fd\/\d+))$/;
+
 function checkSimple(cmd, state) {
+  checkWords(cmd, state);
+  // A file written through a redirect could be .git/HEAD or .git/config.
+  if (cmd.writes.some((w) => !HARMLESS.test(one(w, state) ?? ""))) staleAfter(state);
+}
+
+function checkWords(cmd, state) {
   let words = cmd.words;
   // Every word, after expansion and from the folder the command runs in, is kept off the key.
   for (const word of [...words, ...cmd.redirects]) {
@@ -1051,14 +1190,20 @@ function checkSimple(cmd, state) {
   }
   // Substitutions run first, each in a subshell, also in redirection targets.
   for (const word of [...words, ...cmd.redirects])
-    for (const part of word)
+    for (const part of word) {
+      if (part.runs) ask(`${part.runs} runs code the guard can't read`);
       for (const inner of [part.sub, ...(part.nested ?? [])]) if (typeof inner === "string") checkLine(inner, copy(state));
+    }
 
-  // function NAME { ...; } runs its body later: check it here, like any other command.
-  while (words.length && (RESERVED.has(literal(words[0])) || literal(words[0]) === "function")) {
-    const reserved = literal(words[0]);
-    words = words.slice(reserved === "function" ? 2 : 1);
-    if (reserved === "while" || reserved === "until") state.repo.loop = true;
+  // function NAME { ...; } runs its body later: check it here, like any other command. zsh
+  // runs the command after repeat N, and after the ]] of a short if or while.
+  for (let reserved = literal(words[0]); words.length; reserved = literal(words[0])) {
+    const test = reserved === "[[" ? words.findIndex((w) => w.length === 1 && !w[0].quoted && w[0].text === "]]") : -1;
+    if (RESERVED.has(reserved) || reserved === "function") words = words.slice(reserved === "function" ? 2 : 1);
+    else if (reserved === "repeat" && words.length > 2) words = words.slice(2);
+    else if (test !== -1 && test < words.length - 1) words = words.slice(test + 1);
+    else break;
+    if (["while", "until", "repeat"].includes(reserved)) state.repo.loop = true;
     // The time keyword takes its own -p, and a -- after it, before the command it times.
     if (reserved === "time") while (words.length && ["-p", "--"].includes(literal(words[0]))) words = words.slice(1);
   }
@@ -1104,14 +1249,18 @@ function checkRun(cmd, words, state, child) {
   if (value === null || !oneArg(words[0], state)) return checkUnread(cmd, words, state, child);
   // zsh runs =git as the git on PATH.
   if (/^=./.test(value)) words = [[{ text: value.slice(1), quoted: true }], ...words.slice(1)];
-  const wrapper = basename(value.replace(/^=/, ""));
+  const wrapper = commandName(value.replace(/^=/, ""));
   if (!WRAPPERS.has(wrapper)) return checkCommand(cmd, words, state, child);
+  // A wrapper that's a program of its own runs the command in another process, so a cd or
+  // an assignment there changes nothing for the commands after it.
+  if (!SHELL_WRAPPERS.has(value)) state = copy(state);
   let k = 1;
   let chdir = false;
   let shell = wrapper === "watch";
-  let replace = false;
+  let replace = false; // the string xargs replaces with its input, null when unknown
+  let taken = -1; // where the last xargs option that holds its own value was
   for (; k < words.length; k++) {
-    if (wrapper === "env" && assignment(words[k])) {
+    if (["env", "sudo", "doas"].includes(wrapper) && assignment(words[k])) {
       assign(child, words[k], true);
       continue;
     }
@@ -1119,7 +1268,8 @@ function checkRun(cmd, words, state, child) {
     if (!option?.startsWith("-")) break;
     chdir ||= /^(-[^-]*[CD]|--chdir)/.test(option);
     shell ||= wrapper === "sudo" && /^(-[a-zA-Z]*[si]|--shell$|--login$)/.test(option);
-    replace ||= wrapper === "xargs" && /^(-[IJi]|--replace)/.test(option);
+    const swap = wrapper === "xargs" && /^(?:-([IJ])([\s\S]*)|-i([\s\S]*)|--replace(?:=([\s\S]*))?)$/.exec(option);
+    if (swap) [replace, taken] = [swap[2] || (swap[1] ? one(words[++k] ?? [], state) : swap[3] || swap[4] || "{}"), k];
     const split = wrapper === "env" && /^(-[^-]*S|--split-string(=|$))(.*)/s.exec(option);
     if (!split) continue;
     if ((split[3] || single(words[k + 1] ?? [], state)).includes("\\"))
@@ -1128,17 +1278,21 @@ function checkRun(cmd, words, state, child) {
   }
   if (k === words.length) return;
   const moved = (s) => ({ ...copy(s), cwd: chdir ? null : s.cwd });
-  const next = one(words[k], state);
-  if (k > 1 && one(words[k - 1], state)?.startsWith("-") && !WRAPPERS.has(basename(next ?? "")))
-    checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child));
-  const run = words.slice(k + WRAPPERS.get(wrapper));
+  if (k > 1 && taken !== k - 1 && one(words[k - 1], state)?.startsWith("-")) checkRun(cmd, [words[0], ...words.slice(k + 1)], moved(state), moved(child));
+  let run = words.slice(k + WRAPPERS.get(wrapper));
   if (!run.length) return;
   if (wrapper === "flock" && /^(-c|--command)$/.test(one(run[0], state) ?? "")) return checkString(run[1], "flock -c", state, moved(child));
   if (wrapper === "parallel") return checkParallel(run, state, moved(child));
   if (shell) checkLine(run.map((w) => single(w, state)).join(" "), moved(child));
-  const input = wrapper === "xargs" ? [...(replace ? run.slice(1).map(() => XARGS_INPUT) : run.slice(1)), XARGS_INPUT] : run.slice(1);
-  checkRun(cmd, [run[0], ...input], chdir ? moved(state) : state, chdir ? moved(child) : child);
+  // xargs adds its input at the end, or puts it in place of the replace string.
+  if (replace === null) ask("xargs replaces a string the guard can't read with its input");
+  if (wrapper === "xargs") run = replace ? placeIn(run, replace, XARGS_INPUT) : [...run, XARGS_INPUT];
+  checkRun(cmd, run, chdir ? moved(state) : state, chdir ? moved(child) : child);
 }
+
+// words with each token in their text replaced by the placeholder word.
+const placeIn = (words, token, placeholder) =>
+  words.map((w) => w.flatMap((p) => ("text" in p && p.text.includes(token) ? p.text.split(token).flatMap((t, n) => [...(n ? placeholder : []), ...(t ? [{ text: t, quoted: p.quoted }] : [])]) : [p])));
 
 // What xargs reads from its input: a word the guard can't work out.
 const XARGS_INPUT = [{ name: "(xargs input)", op: "", quoted: true }];
@@ -1198,9 +1352,7 @@ function checkFind(cmd, words, state, child) {
     if (!/^-(exec|execdir|ok|okdir)$/.test(strings[i])) continue;
     let end = i + 1;
     while (end < words.length && strings[end] !== ";" && !(strings[end] === "+" && strings[end - 1] === "{}")) end++;
-    const run = words.slice(i + 1, end).map((w) =>
-      w.flatMap((p) => ("text" in p && p.text.includes("{}") ? p.text.split("{}").flatMap((t, n) => [...(n ? placeholder : []), ...(t ? [{ text: t, quoted: p.quoted }] : [])]) : [p])),
-    );
+    const run = placeIn(words.slice(i + 1, end), "{}", placeholder);
     if (run.length) checkRun(cmd, run, inner, innerChild);
     i = end;
   }
@@ -1263,7 +1415,7 @@ function checkUnread(cmd, words, state, child) {
   const any = !values && /^\**$/.test(name);
   if (!values && (any || first.some((p) => !p.quoted && !("text" in p)))) ask(`runs ${raw(first)}, which the guard can't read, so it could be any command`);
   const patterns = values ? values.map((v) => basename(v)).filter((p) => /[*?[]/.test(p)) : [name];
-  const names = any ? ANY_COMMAND() : CHECKED().filter((n) => patterns.some((p) => globRegex(p).test(n)));
+  const names = any ? ANY_COMMAND() : CHECKED().filter((n) => patterns.some((p) => globRegex(p, "i").test(n)));
   if (names.length && reading) ask(`runs ${raw(first)}, which the guard can't read, inside another command it can't read`);
   else if (names.length) {
     reading = true;
@@ -1279,26 +1431,27 @@ function checkUnread(cmd, words, state, child) {
   staleAfter(state);
 }
 
-// The word holding the command string a shell's -c runs: its first operand after every
-// option (-o and -O take a value, -- and - end the options). undefined without -c, null
-// when it's missing.
+// c: the word holding the command string a shell's -c runs, its first operand after every
+// option (-o and -O take a value, -- and - end the options); undefined without -c, null when
+// it's missing. stdin: whether it reads its commands from stdin (no script named, or -s).
 function shellString(words, strings) {
   let c = false;
+  let s = false;
   let k = 1;
   for (; k < strings.length; k++) {
-    const s = strings[k];
-    if (s === "--" || s === "-") {
+    const arg = strings[k];
+    if (arg === "--" || arg === "-") {
       k++;
       break;
     }
-    if (/^[-+][a-zA-Z]+$/.test(s)) {
-      c ||= s[0] === "-" && s.includes("c");
-      if (/[oO]$/.test(s)) k++;
-    } else if (s === "--rcfile" || s === "--init-file") k++;
-    else if (!s.startsWith("--")) break;
+    if (/^[-+][a-zA-Z]+$/.test(arg)) {
+      c ||= arg[0] === "-" && arg.includes("c");
+      s ||= arg[0] === "-" && arg.includes("s");
+      if (/[oO]$/.test(arg)) k++;
+    } else if (arg === "--rcfile" || arg === "--init-file") k++;
+    else if (!arg.startsWith("--")) break;
   }
-  if (!c) return undefined;
-  return words[k] ?? null;
+  return { c: c ? (words[k] ?? null) : undefined, stdin: !c && (s || k >= words.length) };
 }
 
 // The word su's -c or --command string is, wherever it comes (su root -c '...'), like
@@ -1342,19 +1495,22 @@ const SETUP =
 // A command's own checks, from its name on. child is what it runs with.
 function checkCommand(cmd, words, state, child) {
   const strings = words.map((w) => single(w, state));
-  const name = basename(strings[0]);
+  const name = commandName(strings[0]);
+  const builtin = strings[0];
   const args = words.slice(1);
 
-  if (DECLARE.has(name)) {
-    const exported = name === "export" || strings.slice(1).some((s) => /^-\w*x/.test(s));
+  if (DECLARE.has(builtin)) {
+    const exported = builtin === "export" || strings.slice(1).some((s) => /^-\w*x/.test(s));
     for (const word of args) {
       if (assignment(word)) assign(state, word, exported);
       else if (exported && /^[A-Za-z_]\w*$/.test(literal(word) ?? "")) state.exported.add(literal(word));
     }
     return;
   }
+  // An alias can make any later word in the line run something else.
+  if (builtin === "alias" && strings.slice(1).some((s) => s.includes("="))) ask("an alias defined here can make a later command run something the guard can't see");
   // set -a (or -o allexport) exports every variable assigned after it, until set +a.
-  if (name === "set") {
+  if (builtin === "set") {
     for (let k = 1; k < strings.length && strings[k] !== "--"; k++) {
       const s = strings[k];
       if (/^[-+]o$/.test(s) && strings[k + 1] === "allexport") state.allexport = s[0] === "-";
@@ -1362,15 +1518,15 @@ function checkCommand(cmd, words, state, child) {
     }
     return;
   }
-  if (name === "unset") {
+  if (builtin === "unset") {
     for (const s of strings.slice(1)) if (!s.startsWith("-")) state.vars.set(s, [""]);
     return;
   }
-  if (name === "read") {
+  if (builtin === "read") {
     for (const s of strings.slice(1)) if (/^[A-Za-z_]\w*$/.test(s)) state.vars.set(s, null);
     return;
   }
-  if (name === "cd" || name === "pushd") {
+  if (builtin === "cd" || builtin === "pushd") {
     const dirs = args.filter((w) => !/^-[LPe@]+$/.test(literal(w) ?? ""));
     let to = null;
     if (!dirs.length) to = HOME;
@@ -1385,32 +1541,41 @@ function checkCommand(cmd, words, state, child) {
     state.cwd = to !== null && (isAbsolute(to) || state.cwd) ? resolve(state.cwd ?? "/", to) : null;
     return;
   }
-  if (name === "popd") {
+  if (builtin === "popd") {
     state.cwd = null;
     return;
   }
 
   if (name === "rm") checkRm(words, state);
   if (name === "find") checkFind(cmd, words, state, child);
+  // After a link is made, any path in the line could lead through it.
+  if (name === "ln") state.disk.linked = true;
   // Whether the branch is still the one git reports, once this has run.
-  let readOnly = checkGit(words, strings, state, child) || READ_ONLY.has(name);
+  const git = checkGit(words, strings, state, child);
+  let readOnly = git === true || READ_ONLY.has(name);
   const [, sub, sub2] = strings;
   if (name === "gh" && sub === "repo" && sub2 === "delete") ask("deleting a GitHub repo");
   if (name === "gh" && sub === "api") checkGhApi(strings);
-  if (name === "gh" && sub === "api" && strings.some((w) => /^(-X|--method)=?DELETE$/i.test(w) || w === "DELETE") && strings.some((w) => /^\/?repos\/[^/]+\/[^/]+\/?$/.test(w)))
-    ask("deleting a GitHub repo");
   if (name === "diskutil" && /^(erase|zero|randomDisk|secureErase|partitionDisk)/i.test(sub ?? "")) ask(`diskutil ${sub}`);
   if (name === "dd" && strings.some((w) => /^of=\/dev\//.test(w))) ask("dd to a device");
 
-  // A command handed to another shell runs there: check it too, with what that shell inherits.
+  // A command handed to another shell runs there: check it too, with what that shell
+  // inherits. One that reads its commands from a pipe or a process substitution runs code
+  // the guard can't see; a here-document or here-string it can.
   if (SHELLS.has(name) || name === "su") {
     const inherited = { ...child, vars: new Map([...child.vars].filter(([k]) => child.exported.has(k))) };
-    const c = name === "su" ? suString(words, strings) : shellString(words, strings);
+    const { c, stdin } = name === "su" ? { c: suString(words, strings), stdin: true } : shellString(words, strings);
+    const fed = cmd.heredocs.length + cmd.herestrings.length > 0;
     if (c !== undefined) checkString(c, `${name} -c`, state, inherited);
-    else for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
+    else {
+      for (const doc of cmd.heredocs) checkLine(doc.body, inherited);
+      for (const word of cmd.herestrings) checkString(word, `${name} <<<`, state, inherited);
+      if (stdin && cmd.streamed && !fed) ask(`${name} runs what it reads from a pipe or a process substitution, which the guard can't read`);
+    }
     // What runs there was checked, and marked the branch unknown if it could change it.
-    readOnly = c !== undefined || cmd.heredocs.length > 0;
+    readOnly = c !== undefined || fed;
   }
+  if ((builtin === "source" || builtin === ".") && cmd.streamed) ask(`${builtin} runs what it reads from a process substitution, which the guard can't read`);
   if (name === "eval") {
     // Code eval gets from somewhere the guard can't see is asked about, unless it's what a
     // well-known tool prints to set up a shell (eval "$(brew shellenv)").
@@ -1428,7 +1593,7 @@ function checkCommand(cmd, words, state, child) {
     if (!setup) checkLine(strings.slice(1).join(" "), copy(state));
     readOnly = true;
   }
-  if (!readOnly) staleAfter(state);
+  if (!readOnly) staleAfter(state, git === "branch");
 }
 
 function checkLine(line, state) {
@@ -1457,8 +1622,8 @@ const END = String.raw`/*\*?["']?(?=$|[\s;|&)\`"'])`;
 const RM_FLAGS = String.raw`\brm\b(?:\s+-[a-zA-Z-]*)*\s+-[a-zA-Z]*[rRf][a-zA-Z]*(?:\s+-[a-zA-Z-]*)*`;
 const TOP = String.raw`(?:/|${ROOTISH}${CHILD})`;
 // The path on its own, or as one choice of a brace expansion that starts the word ({~,/tmp/x}).
-const RM_HARD = new RegExp(String.raw`${RM_FLAGS}[^\n;|&]*?(?:^|\s)["']?(?:${TOP}${END}|\{(?:[^\s{}]*,)*${TOP}/*\*?(?=[,}]))`);
-const FIND_DELETE = new RegExp(String.raw`\bfind\s+["']?(?:/|${ROOTISH}${CHILD})${END}[^\n;|&]*-delete\b`);
+const RM_HARD = new RegExp(String.raw`${RM_FLAGS}[^\n;|&]*?(?:^|\s)["']?(?:${TOP}${END}|\{(?:[^\s{}]*,)*${TOP}/*\*?(?=[,}]))`, "i");
+const FIND_DELETE = new RegExp(String.raw`\bfind\s+["']?(?:/|${ROOTISH}${CHILD})${END}[^\n;|&]*-delete\b`, "i");
 function hardRefusals(command) {
   if (RM_HARD.test(command))
     deny("rm -r or rm -f on /, a system folder, my home folder or a folder directly in it is never run by an agent, in any form (also inside quotes, here-documents or backticks). Name the exact path inside a project or temp folder instead.");
@@ -1473,7 +1638,7 @@ function hardRefusals(command) {
 function checkBash(command, cwd) {
   if (POOL_KEY.test(command)) deny("the claude-pool key is never read or copied");
   hardRefusals(command);
-  const start = (stale) => ({ vars: new Map(), exported: new Set(), cwd, depth: 0, repo: { stale, read: false, staleAfterRead: false, loop: false } });
+  const start = (stale) => ({ vars: new Map(), exported: new Set(), cwd, depth: 0, repo: { stale, changed: stale, read: false, staleAfterRead: false, loop: false }, disk: { linked: false } });
   const first = start(false);
   checkLine(command, first);
   if (first.repo.loop && first.repo.staleAfterRead) checkLine(command, start(true));
