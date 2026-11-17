@@ -12,8 +12,9 @@ const ME = join(HOME, "me");
 const TMPDIR = "/var/folders/zz/test/T/";
 const BASH_ENTRY = ["--fail-closed"]; // what settings.json's entry for Bash and Monitor passes
 const SHELL_TOOLS = ["Bash", "Monitor"]; // the tools that run a shell command
-// git asked by the guard reads no user or system config, so my own can't change a result.
-const PLAIN_GIT = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+// git asked by the guard reads no user or system config (even when it asks for the system
+// file by name), so my own can't change a result.
+const PLAIN_GIT = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 
 // "pass" when the guard stays out of it, else its permissionDecision.
 function decision(command, { cwd = ME, tool = "Bash", input, env = PLAIN_GIT } = {}) {
@@ -620,7 +621,7 @@ test("rm -r through a link that's already there is judged on what the link point
 describe("git push", () => {
   const root = mkdtempSync(join(tmpdir(), "guard-push-"));
   // Setup runs git without my own config, so no commit is signed and no hook runs.
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const git = (...args) => spawnSync("git", args, { encoding: "utf8", env });
   const COMMIT = ["-c", "user.name=guard", "-c", "user.email=guard@example.invalid", "commit", "-q", "--allow-empty", "-m", "start"];
   const MAIN = join(root, "main");
@@ -861,8 +862,6 @@ describe("git push", () => {
       "git config core.pager less",
       "git config http.postBuffer 524288000",
       "git -c advice.ignoredHook=false commit -m x",
-      "git -c url.git@github.com:.insteadOf=https://github.com/ clone https://github.com/x/y",
-      "git -c remote.origin.url=/tmp/x fetch",
       "GIT_INDEX_FILE=/tmp/i git add x",
     ],
     FEATURE,
@@ -938,6 +937,63 @@ describe("git push", () => {
     ],
     FEATURE,
   );
+  // git difftool and mergetool source the file in git's mergetools folder that diff.tool,
+  // merge.tool or their gui forms name, and never check the name for "/" or "..", so the
+  // tool can be any shell file (2026-11-17: the guard passed these).
+  at(
+    "deny",
+    [
+      "git -c diff.tool=../../../../../../../../../../tmp/evil.sh difftool -y",
+      "git -c merge.tool=../../../../tmp/evil.sh mergetool",
+      "git -c diff.guitool=../../tmp/evil.sh difftool -g -y",
+      "git -c Merge.GuiTool=../../tmp/evil.sh mergetool -g",
+      "git config diff.tool ../../../../tmp/evil.sh",
+      "git config merge.tool ../../../../tmp/evil.sh",
+      "git config set diff.guitool x",
+      "git config --global merge.guitool x",
+    ],
+    FEATURE,
+  );
+  // git passes config given on its command line to every hook and program it runs, and a
+  // hook can push (a post-commit auto-push), so config that sends a push elsewhere is refused
+  // with any command (2026-11-17: the guard passed these off a push).
+  at(
+    "deny",
+    [
+      "git -c remote.origin.push=+refs/heads/feature:refs/heads/main commit -m x",
+      "git -c url./tmp/elsewhere.insteadOf=origin commit -m x",
+      "git -c remote.pushDefault=backup merge x",
+      "git -c branch.feature.merge=refs/heads/main rebase main",
+      "git -c push.default=matching commit -m x",
+      "git -c url.git@github.com:.insteadOf=https://github.com/ clone https://github.com/x/y",
+      "git -c remote.origin.url=/tmp/x fetch",
+    ],
+    FEATURE,
+  );
+  at("pass", ["git -c push.default=current commit -m x", "git -c push.autoSetupRemote=true commit -m x"], FEATURE);
+  // Leaving the system config out reaches a hook's push as well, and changes it only when
+  // that file holds a key that steers a push, or an include that could: then it's refused
+  // with any command. With none, it passes off a push.
+  test("GIT_CONFIG_NOSYSTEM off a push is refused only when the system config steers a push", (t) => {
+    const dir = mkdtempSync(join(tmpdir(), "guard-system-"));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const system = (name, text) => {
+      writeFileSync(join(dir, name), text);
+      return { ...env, GIT_CONFIG_SYSTEM: join(dir, name) };
+    };
+    const plain = system("plain", "[credential]\n\thelper = osxkeychain\n");
+    const steering = [
+      system("url", '[url "/tmp/elsewhere"]\n\tpushInsteadOf = origin\n'),
+      system("default", "[push]\n\tdefault = nothing\n"),
+      system("include", "[include]\n\tpath = /tmp/more\n"),
+      { ...env, GIT_CONFIG_SYSTEM: join(dir, "missing") },
+    ];
+    for (const command of ["GIT_CONFIG_NOSYSTEM=1 git log", "GIT_CONFIG_NOSYSTEM=1 git commit -m x"]) {
+      assert.equal(decision(command, { cwd: FEATURE, env: plain }), "pass", command);
+      for (const e of steering) assert.equal(decision(command, { cwd: FEATURE, env: e }), "deny", `${command} with ${e.GIT_CONFIG_SYSTEM}`);
+    }
+    assert.equal(decision("GIT_CONFIG_NOSYSTEM=1 git push origin feature", { cwd: FEATURE, env: plain }), "deny");
+  });
   // GIT_ variables that run a shell string have names with no telling shape, so only known
   // harmless ones pass: GIT_TEST_FSMONITOR is the fsmonitor hook when core.fsmonitor is
   // unset, git-difftool--helper evals GIT_DIFFTOOL_EXTCMD, and git maintenance runs the

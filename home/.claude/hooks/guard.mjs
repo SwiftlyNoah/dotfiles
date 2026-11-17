@@ -721,16 +721,19 @@ const COMMAND_KEYS = /^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i;
 const COMMAND_ENV = /^GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)$/;
 
 // Config that makes git run a program the guard can't read (hooks, an ssh command, a
-// credential helper or askpass, an fsmonitor hook, a diff or merge driver, a filter, gpg, a
-// template folder's hooks, the ext:: transport, a browser for help), or that brings in config
-// it can't see (an include, or an alias, which checkAlias looks up in git's config and can't
-// find here), or help.autocorrect, which runs the git command nearest a mistyped one. It's
-// refused for every git command, push or not: the program could itself force push main or
-// delete files, and the guard checks every command something runs. Matched by section and by
-// the names git gives such keys, so one git adds later in that shape is refused too.
+// credential helper or askpass, an fsmonitor hook, a diff or merge driver or tool, a filter,
+// gpg, a template folder's hooks, the ext:: transport, a browser for help), or that brings in
+// config it can't see (an include, or an alias, which checkAlias looks up in git's config and
+// can't find here), or help.autocorrect, which runs the git command nearest a mistyped one.
+// It's refused for every git command, push or not: the program could itself force push main
+// or delete files, and the guard checks every command something runs. Matched by section and
+// by the names git gives such keys, so one git adds later in that shape is refused too. The
+// one outside that shape is diff.tool and merge.tool (and their gui forms): difftool and
+// mergetool source the file of that name in git's mergetools folder, "../" included.
 const RUNS_PROGRAM = new RegExp(
   `^(${[
     String.raw`(alias|help|include|includeif|credential|filter|gpg|hook|sendemail|difftool|mergetool|guitool|man|browser|web|instaweb)\..+`,
+    String.raw`(diff|merge)\.(gui)?tool`,
     String.raw`protocol\.(?!(version|(file|git|http|https|ssh)\.allow)$).+`,
     String.raw`core\.(hookspath|askpass|gitproxy)|init\.templatedir|interactive\.difffilter|diff\.external|imap\.tunnel`,
     String.raw`submodule\..+\.update|remote\..+\.(uploadpack|receivepack|vcs)|lfs\.(customtransfer|extension)\..+`,
@@ -742,18 +745,35 @@ const RUNS_PROGRAM = new RegExp(
 // and mirror setting, url rewrites, push settings, and the branch's upstream. These are the
 // only sections git reads a push's destination and refspecs from, so a deny-list of them
 // leaves no unknown key that redirects a push. push.default may be current or simple, which
-// push the branch the repo is on.
+// push the branch the repo is on. They're refused with every git command, not only a push:
+// git passes config given on its command line to each hook and program it runs, and one of
+// those (a post-commit hook that pushes) can push with it.
 const PUSH_CONFIG = /^(remote\..+|url\..+|push\.(?!(autosetupremote|followtags)$).+|branch\..+\.(merge|remote|pushremote))$/i;
 
-// Whether git run with key=value could run a program the guard can't read or, for a git
-// command that could push (push set), change what the push sends or where. value is
-// undefined when the guard can't see it. Hooks may go to /dev/null, which turns them off,
-// and fsmonitor may be on or off (true starts git's own daemon); a path is a hook it runs.
-function risky(key, value, push) {
+// Whether git run with key=value could run a program the guard can't read or change what a
+// push sends or where. value is undefined when the guard can't see it. Hooks may go to
+// /dev/null, which turns them off, and fsmonitor may be on or off (true starts git's own
+// daemon); a path is a hook it runs.
+function risky(key, value) {
   if (/^core\.hookspath$/i.test(key)) return value !== "/dev/null";
   if (/^core\.fsmonitor$/i.test(key)) return !/^(true|false|yes|no|on|off|1|0|)$/i.test(value ?? "?");
-  if (/^push\.default$/i.test(key)) return push && !["current", "simple"].includes(value);
-  return RUNS_PROGRAM.test(key) || (push && PUSH_CONFIG.test(key));
+  if (/^push\.default$/i.test(key)) return !["current", "simple"].includes(value);
+  return RUNS_PROGRAM.test(key) || PUSH_CONFIG.test(key);
+}
+
+// Whether git's system config holds a key that steers a push, or an include, which could
+// bring one in: only then does leaving that file out (GIT_CONFIG_NOSYSTEM) change where a
+// push goes, made by git or by a hook or program it runs. One the guard can't read counts.
+let steers;
+function systemConfigSteersPush() {
+  try {
+    steers ??= runGit("/", ["config", "--system", "--name-only", "--list"])
+      .split("\n")
+      .some((key) => PUSH_CONFIG.test(key) || /^include(if)?\./i.test(key));
+  } catch {
+    steers = true;
+  }
+  return steers;
 }
 
 // git's environment from this line. Only GIT_ variables known not to run a program or choose
@@ -763,12 +783,12 @@ function risky(key, value, push) {
 // ones an agent sets are few. They name who wrote a commit, tune output, prompts, locks and
 // tracing, skip Git LFS downloads, or leave the system config file out. HOME and
 // XDG_CONFIG_HOME are refused other than as they already are, since they choose git's own
-// config file, which can hold an alias, a pager or hooks. For a push, leaving the system
-// config out is refused too, since it can hold a url rewrite. GIT_DIR, GIT_WORK_TREE and
-// GIT_COMMON_DIR make the repo unknown instead, which refuses what depends on it.
+// config file, which can hold an alias, a pager or hooks. Leaving the system config out is
+// refused for a push, and for any command when that file steers a push. GIT_DIR,
+// GIT_WORK_TREE and GIT_COMMON_DIR make the repo unknown instead, which refuses what depends
+// on it.
 const SAFE_GIT_ENV =
   /^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|FLUSH|PROGRESS_DELAY|ADVICE|TRACE\w*|CURL_VERBOSE|REDACT_COOKIES|MERGE_VERBOSITY|(LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|LFS_SKIP_SMUDGE|CONFIG_NOSYSTEM)$/;
-const PUSH_ENV = /^GIT_CONFIG_NOSYSTEM$/;
 const otherRepo = (env) => ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"].some((name) => env.exported.has(name));
 
 // What a command git runs (a pager, rebase -x, an alias) inherits: git's environment, and
@@ -785,14 +805,14 @@ function checkCommandValue({ what, value }, git, env) {
   checkString([{ text: value, quoted: true }], what, git.state, inner);
 }
 
-// The config and environment git runs with, judged for a push when it could be one: config
-// given on its command line (own), and config passed on by a git that started this one,
-// whose pager or editor was checked there. Returns the commands its pager and editor run.
+// The config and environment git runs with (push set when the command could be a push):
+// config given on its command line (own), and config passed on by a git that started this
+// one, whose pager or editor was checked there. Returns the commands its pager and editor run.
 function checkGitSettings(git, env, push) {
   const commands = [];
   for (const { key, value, what, own } of git.config) {
     const command = own && COMMAND_KEYS.test(key);
-    if (command ? value === undefined : risky(key, value, push)) redirects(what);
+    if (command ? value === undefined : risky(key, value)) redirects(what);
     if (command) commands.push({ what, value });
   }
   for (const name of env.exported) {
@@ -801,7 +821,7 @@ function checkGitSettings(git, env, push) {
     const what = `${name} in git's environment`;
     const kept = !["HOME", "XDG_CONFIG_HOME"].includes(name) || values?.every((v) => v === (name === "HOME" ? HOME : process.env.XDG_CONFIG_HOME));
     if (COMMAND_ENV.test(name) && values) commands.push(...values.map((value) => ({ what, value })));
-    else if (COMMAND_ENV.test(name) || (push && PUSH_ENV.test(name)) || !kept) redirects(what);
+    else if (COMMAND_ENV.test(name) || (name === "GIT_CONFIG_NOSYSTEM" && (push || systemConfigSteersPush())) || !kept) redirects(what);
     else if (name.startsWith("GIT_") && !SAFE_GIT_ENV.test(name))
       deny(`${what} isn't on the guard's list of GIT_ variables that can't run a program or change what a push sends and where, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
   }
@@ -1100,7 +1120,7 @@ function checkGitConfig(git) {
   if (sub === "rename-section" || sub === "edit") redirects(`git config ${sub}`);
   if (sub === null ? read || (!write && operands.length <= 1) : sub !== "set") return;
   const [key = "", value] = operands;
-  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value, true)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
+  if (COMMAND_KEYS.test(key) ? !SAFE_PROGRAMS.has(value) : risky(key, value)) redirects(`git config ${key}${value === undefined ? "" : ` ${value}`}`);
 }
 
 // git's own commands. Any other is an alias, or a git-<name> program on PATH.
