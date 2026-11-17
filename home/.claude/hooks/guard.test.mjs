@@ -718,7 +718,7 @@ describe("git push", () => {
   // refused for any command, and so is config that sends a push somewhere else. The same goes
   // for git's environment, where HOME and XDG_CONFIG_HOME choose its config file, for set -a
   // exporting what follows, and for git config writing such keys for later. A pager or an
-  // editor is judged as the command it runs.
+  // editor passes only as one of the few programs that do nothing else.
   at(
     "deny",
     [
@@ -853,11 +853,7 @@ describe("git push", () => {
       "git -c maintenance.auto=false push --force origin feature",
       "git -c core.fsmonitor=false push origin feature",
       "git -c core.pager=x push origin feature",
-      "git -c core.pager='less -R' log",
       "git -c pager.log=false log",
-      "git -c sequence.editor=x rebase -i HEAD~2",
-      "GIT_PAGER=x git log",
-      "GIT_PAGER='git log' git log",
       "GIT_EDITOR=vim git commit",
       "git config core.pager less",
       "git config http.postBuffer 524288000",
@@ -866,19 +862,40 @@ describe("git push", () => {
     ],
     FEATURE,
   );
-  // A pager or editor runs the command it names, which is judged as if typed.
+  // git runs an editor with a file it wrote and feeds a pager on stdin, so a shell, source,
+  // eval, xargs or an interpreter given as one runs that text as code: only the few programs
+  // that do nothing else pass, given to git or written for later (2026-11-17: the guard
+  // judged the value alone, so GIT_EDITOR=sh with -m ran the message). A push that doesn't
+  // page never runs either.
   at(
-    "ask",
+    "deny",
     [
+      "GIT_EDITOR=sh git commit --allow-empty -e -m 'touch marker'",
+      "GIT_EDITOR=bash git commit -e -m x",
+      "GIT_EDITOR=. git commit -e -m x",
+      "GIT_EDITOR=source git commit -e -m x",
+      "GIT_EDITOR=eval git commit -e -m x",
+      "GIT_EDITOR=xargs git commit -e -m x",
+      "GIT_EDITOR=python3 git commit -e -m x",
+      "git -c core.editor=sh commit -e -m x",
+      "GIT_SEQUENCE_EDITOR=sh git rebase -i HEAD~2",
+      "git -c sequence.editor=sh rebase -i HEAD~2",
+      "GIT_PAGER=sh git -p log",
+      "GIT_PAGER=sh git -p push origin feature",
+      "GIT_PAGER=x git log",
       "git -c core.pager='git push --force origin main;:' log",
-      "git -c core.pager='git push --force origin main' push origin feature",
       "git -c pager.push='git push --force origin main' push origin feature",
       "GIT_PAGER='git push --force origin main' git log",
       "GIT_EDITOR='git push --force origin main' git commit",
       "git -c core.pager='diskutil eraseDisk APFS X disk9' log",
+      "git config core.editor sh",
+      "git config sequence.editor sh",
+      "git config core.pager sh",
+      "git config --global core.editor bash",
     ],
     FEATURE,
   );
+  at("pass", ["git -c core.pager='git push --force origin main' push origin feature", "GIT_PAGER=sh git push origin feature", "GIT_EDITOR=sh git push origin feature"], FEATURE);
   // On a push, config and environment that can change what it sends or where, or run code
   // while it runs, are refused, and so is config given to a command git runs (a pager, rebase
   // -x, an alias or a git-<name> program), which reaches the pushes it makes.
@@ -1036,7 +1053,7 @@ describe("git push", () => {
     FEATURE,
   );
   at("pass", ["git -p --no-pager -c 'core.pager=git checkout -q main; cat' push --force origin HEAD", "git --paginate -P -c core.pager=x push origin feature"], FEATURE);
-  // A pager that switches the branch leaves it unknown to a later push, like any command that can.
+  // A pager that switches the branch is outside the safe few.
   at("deny", ["git -c core.pager='git checkout main' log; git push --force"], FEATURE);
 
   // A word whose value the guard can't work out could be push, --force or +main, and an
@@ -1144,7 +1161,7 @@ describe("git push", () => {
   // A push that pages starts its pager first, so what the pager does counts for the push;
   // one that doesn't never runs it.
   at("deny", ["git -c core.pager='git checkout main' push --force origin HEAD"], PAGED);
-  at("ask", ["git -c core.pager=x push origin feature"], PAGED);
+  at("deny", ["git -c core.pager=x push origin feature"], PAGED);
   at("pass", ["git -c core.pager=less push origin feature", "git -c core.pager=x -c pager.push=false push origin feature"], PAGED);
   at("deny", ["git -p -c core.pager='git checkout main' push --force origin HEAD", "git -c pager.push -c core.pager='git checkout main' push --force origin HEAD"], FEATURE);
   at("pass", ["git -c core.pager='git checkout main' push --force origin HEAD", "git -p -P -c core.pager=x push origin feature"], FEATURE);

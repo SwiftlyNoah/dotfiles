@@ -715,8 +715,10 @@ const GIT_VALUES = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--co
 const redirects = (what) =>
   deny(`${what} can run a program the guard can't read or change what a push sends and where, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
 
-// Config whose value is a command git runs through the shell, a pager or an editor: it's
-// judged as that command, the way sh -c is.
+// Config and environment whose value is a pager or an editor. git runs an editor with a
+// file it wrote as its argument and feeds a pager on stdin, so a shell, source, eval, xargs
+// or an interpreter runs that text as code: only programs that do nothing else pass.
+const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less", "vi", "vim", "nano"]);
 const COMMAND_KEYS = /^(core\.(pager|editor)|sequence\.editor|pager\..+)$/i;
 const COMMAND_ENV = /^GIT_(PAGER|EDITOR|SEQUENCE_EDITOR)$/;
 
@@ -791,41 +793,33 @@ const SAFE_GIT_ENV =
   /^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|(AUTHOR|COMMITTER)_(NAME|EMAIL|DATE)|TERMINAL_PROMPT|OPTIONAL_LOCKS|FLUSH|PROGRESS_DELAY|ADVICE|TRACE\w*|CURL_VERBOSE|REDACT_COOKIES|MERGE_VERBOSITY|(LITERAL|GLOB|NOGLOB|ICASE)_PATHSPECS|LFS_SKIP_SMUDGE|CONFIG_NOSYSTEM)$/;
 const otherRepo = (env) => ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"].some((name) => env.exported.has(name));
 
-// What a command git runs (a pager, rebase -x, an alias) inherits: git's environment, and
-// the config given to git, which git passes on to every git it starts.
+// What a command git runs (rebase -x, an alias) inherits: git's environment, and the config
+// given to git, which git passes on to every git it starts.
 const gitChild = (git, env) => ({ ...copy(env), gitConfig: git.config.map((c) => ({ ...c, own: false })) });
-
-// The command a pager or editor setting runs, checked as typed, unless it's one of a few
-// programs that do nothing else. It runs once: what it runs doesn't page through it again.
-const SAFE_PROGRAMS = new Set(["true", "false", ":", "cat", "less"]);
-function checkCommandValue({ what, value }, git, env) {
-  if (SAFE_PROGRAMS.has(value)) return;
-  const inner = { ...gitChild(git, env), cwd: null };
-  for (const name of inner.exported) if (COMMAND_ENV.test(name)) inner.exported.delete(name);
-  checkString([{ text: value, quoted: true }], what, git.state, inner);
-}
 
 // The config and environment git runs with (push set when the command could be a push):
 // config given on its command line (own), and config passed on by a git that started this
-// one, whose pager or editor was checked there. Returns the commands its pager and editor run.
+// one, whose pager or editor was checked there. A pager or editor (an unknown one counts)
+// must be one of the safe few, except on a push that doesn't page, which never runs either.
 function checkGitSettings(git, env, push) {
-  const commands = [];
+  const programs = [];
   for (const { key, value, what, own } of git.config) {
-    const command = own && COMMAND_KEYS.test(key);
-    if (command ? value === undefined : risky(key, value)) redirects(what);
-    if (command) commands.push({ what, value });
+    if (own && COMMAND_KEYS.test(key)) programs.push({ what, value });
+    else if (risky(key, value)) redirects(what);
   }
   for (const name of env.exported) {
     if (!env.vars.has(name)) continue; // exported as it already was
     const values = env.vars.get(name);
     const what = `${name} in git's environment`;
     const kept = !["HOME", "XDG_CONFIG_HOME"].includes(name) || values?.every((v) => v === (name === "HOME" ? HOME : process.env.XDG_CONFIG_HOME));
-    if (COMMAND_ENV.test(name) && values) commands.push(...values.map((value) => ({ what, value })));
-    else if (COMMAND_ENV.test(name) || (name === "GIT_CONFIG_NOSYSTEM" && (push || systemConfigSteersPush())) || !kept) redirects(what);
+    if (COMMAND_ENV.test(name)) programs.push(...(values ?? [undefined]).map((value) => ({ what, value })));
+    else if ((name === "GIT_CONFIG_NOSYSTEM" && (push || systemConfigSteersPush())) || !kept) redirects(what);
     else if (name.startsWith("GIT_") && !SAFE_GIT_ENV.test(name))
       deny(`${what} isn't on the guard's list of GIT_ variables that can't run a program or change what a push sends and where, so the guard can't tell whether this is a force push to main or master. Leave it out and run it again.`);
   }
-  return commands;
+  const unsafe = programs.find(({ value }) => !SAFE_PROGRAMS.has(value));
+  if (unsafe && !(PUSHES.has(git.command) && !pagesPush(git, env)))
+    deny(`${unsafe.what} sets a pager or editor, which git runs on text it writes, and only ${[...SAFE_PROGRAMS].join(", ")} can't run that text as code. Leave it out, or use one of those, and run it again.`);
 }
 
 // Whether git pages this push, and so starts its pager before the push reads anything: when
@@ -1252,13 +1246,8 @@ function checkGit(words, strings, state, env) {
   // A word the guard can't read before the command could be the push itself, and so could
   // an alias or a git-<name> program, which gets git's config.
   const push = PUSHES.has(git.command);
-  const commands = checkGitSettings(git, env, push || git.unread !== null || git.alias);
-  // What a pager or editor runs counts for what git does after it starts, but a push only
-  // pages when told to and never starts an editor: then it counts for later commands only.
-  const later = push && commands.length > 0 && !pagesPush(git, env);
-  if (!later) for (const command of commands) checkCommandValue(command, git, env);
+  checkGitSettings(git, env, push || git.unread !== null || git.alias);
   if (push || git.unread) checkGitPush(git, env);
-  if (later) for (const command of commands) checkCommandValue(command, git, env);
   if (git.unread || git.command === null) return false;
   if (git.command === "config") checkGitConfig(git);
   if (git.command === "remote" && strings.slice(git.at + 1).some((s) => s.startsWith("--mirror")))
