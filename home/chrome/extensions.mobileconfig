@@ -16,7 +16,7 @@
   <key>PayloadIdentifier</key><string>local.dotfiles.chrome-extensions</string>
   <key>PayloadUUID</key><string>35A3272B-0BD0-4CDC-90F8-FA6CC63A47FE</string>
   <key>PayloadDisplayName</key><string>Chrome extensions</string>
-  <key>PayloadDescription</key><string>Every Chrome profile has 1Password, and none has Claude in Chrome.</string>
+  <key>PayloadDescription</key><string>Every Chrome profile has 1Password (DevTools may open on it), and none has Claude in Chrome.</string>
   <key>PayloadContent</key>
   <array>
     <dict>
@@ -39,6 +39,12 @@
           <key>installation_mode</key><string>blocked</string>
         </dict>
       </dict>
+      <!--
+        DevTools may open on extensions installed by policy (1). Chrome's default (0) refuses
+        it, which also hides 1Password's sign-in menu from the agent browsers' DevTools page
+        tree, so no sweep could pick a 1Password row once the policy applied (2026-11-18).
+      -->
+      <key>DeveloperToolsAvailability</key><integer>1</integer>
     </dict>
   </array>
 </dict>
