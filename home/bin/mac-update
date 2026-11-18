@@ -85,7 +85,9 @@ print -- "==> npm globals"
 npm install --global --no-fund --no-audit --loglevel=error ${^NPM_GLOBALS}@latest
 
 print -- "==> uv Pythons"
-uv python install 3.14
+# 3.12 too: ~/me/photos pins its scripts to >=3.12,<3.13 (osxphotos) and runs them offline,
+# so it can't fetch one itself; without it the nightly photos refresh failed (2026-11-17).
+uv python install 3.14 3.12
 uv python upgrade
 
 after=$(versions)
