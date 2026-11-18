@@ -71,6 +71,19 @@ if [[ ! -x $MCP_BIN ]]; then
   npm ci --prefix "$MCP_DIR" --no-fund --no-audit --loglevel=error >&2
 fi
 
+# A page an agent opens in the background gets its own window instead of a background tab.
+# 1Password draws its sign-in prompt only in a window's active tab, so on a background tab it
+# never appeared and no sweep could sign in (2026-11-18). A window opened in the background
+# is its own active tab and still takes no focus. chrome-devtools-mcp passes Puppeteer only
+# `background`; Puppeteer's `type: 'window'` does the rest. Patched in place, once per install.
+readonly MCP_CONTEXT="$MCP_DIR/node_modules/chrome-devtools-mcp/build/src/McpContext.js"
+readonly WINDOWED="newPage({ background, type: background ? 'window' : 'tab' })"
+if ! grep -qF "$WINDOWED" "$MCP_CONTEXT"; then
+  sed -i '' "s/newPage({ background })/$WINDOWED/g" "$MCP_CONTEXT"
+  grep -qF "$WINDOWED" "$MCP_CONTEXT" ||
+    print -u2 -- "agent-browser: chrome-devtools-mcp changed; pages open as background tabs, where 1Password can't sign in"
+fi
+
 zsystem flock -u $lock_fd
 
 # Through background.mjs, so agents' pages never come in front of my apps. No usage
