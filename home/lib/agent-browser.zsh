@@ -166,7 +166,17 @@ agent_browser_front() {
 # home/.hammerspoon/init.lua): macOS lets only the app in front, or one with Hammerspoon's
 # permissions, bring another app forward. It also records whether I have it open.
 agent_browser_app() {
-  /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -q -t 5 -c "AgentBrowsers.$1('$ID')" >/dev/null && return 0
+  # hs's own -t limit doesn't cover a Hammerspoon that has stopped answering altogether: then
+  # hs waits forever (2026-11-18), and so would the caller. So it gets 10 seconds here too.
+  /Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -q -t 5 -c "AgentBrowsers.$1('$ID')" >/dev/null &
+  local -i pid=$! tries=50
+  while (( tries-- > 0 )) && kill -0 $pid 2>/dev/null; do sleep 0.2; done
+  if kill -0 $pid 2>/dev/null; then
+    kill $pid 2>/dev/null
+    wait $pid 2>/dev/null
+  elif wait $pid; then
+    return 0
+  fi
   print -u2 -- "agent-browser: can't $1 the $ID browser: Hammerspoon isn't answering"
   return 1
 }
