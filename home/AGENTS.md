@@ -32,19 +32,16 @@ where my private notes give a kind of work its own browser server (`<id>-browser
 
 - Other sessions use the same browser at the same time: open your own page, work in
   it, and close it when you are done. Never close or navigate a page you did not open.
-- If a site asks you to sign in, first run `noah asks gate signin --site <host>`. It passes
-  at once when I am at the Mac; otherwise it sends the sign-in to my phone and Watch, and
-  exit 4 means it waits on me: park that task and do other work. Once it passes, use the
-  1Password suggestion in the sign-in field (or the passkey prompt) and tell me you are
-  waiting: I approve it with Touch ID. Always sign in with a passkey: where a site offers
-  one (a "passkey", "security key or biometric" or "use your passkey" option), pick it over a
-  password, a code or a phone push. A passkey goes through 1Password's prompt ("Use
-  passkey", in the page). When Chrome's own "Use a saved passkey" dialog appears instead
-  (Apple Passwords, a phone or tablet), press its Cancel and use 1Password's; if 1Password's
-  never comes, run `agent-browser-doctor --fix`, which finds and repairs a disabled 1Password,
-  then try again. Never
-  type, read or copy a password, and never use a script to read a field's value. If
-  1Password has nothing for the site, stop and ask me.
+- If a site asks you to sign in, sign in yourself through 1Password: no need to ask me first
+  (`noah asks gate signin --site <host>` still runs where a tool expects it, and passes). If
+  1Password asks for Touch ID, tell me you are waiting. Always sign in with a passkey: where
+  a site offers one (a "passkey", "security key or biometric" or "use your passkey" option),
+  pick it over a password, a code or a phone push. A passkey goes through 1Password's prompt
+  ("Use passkey", in the page). When Chrome's own "Use a saved passkey" dialog appears
+  instead (Apple Passwords, a phone or tablet), press its Cancel and use 1Password's; if
+  1Password's never comes, run `agent-browser-doctor --fix`, which finds and repairs a
+  disabled 1Password, then try again. Never type, read or copy a password, and never use a
+  script to read a field's value. If 1Password has nothing for the site, stop and ask me.
 - One-time codes are yours to handle; don't ask me for them. When a sign-in you started
   sends a code by text, get it with `~/coding/noah-os/bin/noah otp --from-site <host>` and
   type it in; a code by email, read it from that mailbox. Use a code only on the site that
