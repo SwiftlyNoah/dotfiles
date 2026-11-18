@@ -47,8 +47,11 @@ local function cycle(windows, current)
 end
 
 -- The agents' shared browsers (home/lib/agent-browser.zsh) are Chromes too: the same app,
--- each started with its own --user-data-dir. Which one a Chrome is: "personal" for mine,
--- or the shared browser's id. Remembered per process, since asking costs a `ps`.
+-- each started with its own --user-data-dir. Which one a Chrome is: "personal" for mine
+-- (the only one started with no --user-data-dir), the shared browser's id, or "other" for
+-- any other Chrome with a folder of its own, such as a script's headless one: counted as mine,
+-- it had no windows, so every ⌘⇧ profile key opened a new window instead of finding the
+-- profile's (2026-11-18). Remembered per process, since asking costs a `ps`.
 -- Their profiles live where home/lib/agent-browser.zsh puts them: main's in
 -- ~/.local/share/agent-browser, each other's in ~/.local/share/agent-browser-<id>.
 local AGENT_STATE = HOME .. "/.local/share/agent-browser"
@@ -60,8 +63,12 @@ local function chromeOwner(app)
     local command = hs.execute("/bin/ps -o command= -p " .. pid)
     local prefix = "--user-data-dir=" .. AGENT_STATE
     local at = command:find(prefix, 1, true)
-    local suffix = at and command:sub(at + #prefix):match("^(%-?[%w_]*)/profile ")
-    owners[pid] = suffix == nil and "personal" or (suffix == "" and "main" or suffix:sub(2))
+    local suffix = at and command:sub(at + #prefix):match("^(%-?[%w_]*)/profile%f[%s%z]")
+    if suffix then
+      owners[pid] = suffix == "" and "main" or suffix:sub(2)
+    else
+      owners[pid] = command:find("--user-data-dir=", 1, true) and "other" or "personal"
+    end
   end
   return owners[pid]
 end
