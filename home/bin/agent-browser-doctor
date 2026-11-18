@@ -1,0 +1,51 @@
+#!/bin/zsh
+# Checks that 1Password works in every shared browser: its Chrome answers, and 1Password's
+# extension is installed and enabled. Without it, a sign-in gets Chrome's own "Use a saved
+# passkey" dialog (Apple Passwords, a phone) instead of 1Password's prompt, and no autofill.
+#
+#   agent-browser-doctor         one line per browser; exits 1 when any is broken
+#   agent-browser-doctor --fix   also restarts each browser whose 1Password Chrome disabled
+#                                as corrupt, then checks again
+#
+# 1Password comes from the Chrome policy in home/chrome/extensions.mobileconfig, and Chrome
+# refuses to repair a policy-installed extension by hand ("Cannot repair a policy-installed
+# extension"). It reinstalls one it finds corrupt when it starts, so a restart is the fix
+# (agent_browser_restart: tabs and sign-ins survive it). mac-update runs this with --fix.
+emulate -L zsh
+setopt no_unset pipe_fail
+source "${0:A:h:h}/lib/agent-browser.zsh"
+readonly ONEPASSWORD=aeblfdkhhhdcdjpifhhbdiojplfjncoa
+readonly EXTENSIONS="${0:A:h:h}/lib/agent-browser-extensions.mjs"
+fix=0
+[[ ${1:-} == --fix ]] && fix=1
+
+# Sets $verdict for the current instance: ok, corrupt, or another problem in words.
+diagnose() {
+  if ! agent_browser_wait_up 5; then verdict="Chrome isn't running"; return; fi
+  local line
+  line=$(agent_browser_node "$EXTENSIONS" $PORT 2>/dev/null | grep -F "\"id\":\"$ONEPASSWORD\"")
+  if [[ -z $line ]]; then verdict="1Password isn't installed (or chrome://extensions didn't answer)"
+  elif [[ $line == *'"corrupt":true'* ]]; then verdict=corrupt
+  elif [[ $line != *'"state":"ENABLED"'* ]]; then verdict="1Password is turned off"
+  else verdict=ok
+  fi
+}
+
+integer broken=0
+for id in ${(f)"$(agent_browser_ids)"}; do
+  agent_browser_instance $id
+  diagnose
+  if [[ $verdict == corrupt ]] && (( fix )); then
+    print -- "FIX   $NAME: 1Password disabled as corrupt; restarting Chrome to reinstall it"
+    agent_browser_restart && sleep 10
+    diagnose
+  fi
+  [[ $verdict == corrupt ]] && verdict="1Password disabled as corrupt (agent-browser-doctor --fix)"
+  if [[ $verdict == ok ]]; then
+    print -- "OK    $NAME: 1Password enabled"
+  else
+    print -- "FAIL  $NAME: $verdict"
+    broken+=1
+  fi
+done
+(( broken == 0 ))

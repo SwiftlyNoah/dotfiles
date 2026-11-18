@@ -183,6 +183,38 @@ agent_browser_logout_pending() {
   [[ -n $(/usr/bin/find "$AGENT_BROWSER_LOGOUT_MARK" -mmin -3 2>/dev/null) ]]
 }
 
+# Chrome being replaced on disk: home/bin/agent-browser-pause holds every shared browser
+# closed while its command runs. The mark expires after 15 minutes, so a pause that dies
+# midway can't keep the browsers down for long.
+readonly AGENT_BROWSER_HOLD_MARK="$HOME/.local/state/agent-browser/held"
+agent_browser_hold_mark() {
+  mkdir -p "${AGENT_BROWSER_HOLD_MARK:h}"
+  : >"$AGENT_BROWSER_HOLD_MARK"
+}
+agent_browser_hold_release() {
+  rm -f "$AGENT_BROWSER_HOLD_MARK"
+}
+agent_browser_hold_pending() {
+  [[ -n $(/usr/bin/find "$AGENT_BROWSER_HOLD_MARK" -mmin -15 2>/dev/null) ]]
+}
+
+# Every Chrome running from /Applications that isn't one of the shared browsers (mine, or a
+# script's throwaway one): one main process ID per line.
+agent_browser_other_chromes() {
+  local -a profiles
+  local id pid cmd
+  for id in ${(f)"$(agent_browser_ids)"}; do
+    profiles+=("$HOME/.local/share/agent-browser${${id:#main}:+-$id}/profile")
+  done
+  ps -axo pid=,command= | while read -r pid cmd; do
+    [[ $cmd == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"( *|) ]] || continue
+    for id in $profiles; do
+      [[ $cmd == *"--user-data-dir=$id"( *|) ]] && continue 2
+    done
+    print -r -- $pid
+  done
+}
+
 # Whether this instance's Chrome is running. The trailing space or end keeps "agent-browser"
 # from matching another browser's "agent-browser-<id>".
 agent_browser_running() {

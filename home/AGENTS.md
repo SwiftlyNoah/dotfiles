@@ -36,7 +36,11 @@ where my private notes give a kind of work its own browser server (`<id>-browser
   at once when I am at the Mac; otherwise it sends the sign-in to my phone and Watch, and
   exit 4 means it waits on me: park that task and do other work. Once it passes, use the
   1Password suggestion in the sign-in field (or the passkey prompt) and tell me you are
-  waiting: I approve it with Touch ID. Never
+  waiting: I approve it with Touch ID. A passkey goes through 1Password's prompt ("Use
+  passkey", in the page). When Chrome's own "Use a saved passkey" dialog appears instead
+  (Apple Passwords, a phone or tablet), press its Cancel and use 1Password's; if 1Password's
+  never comes, run `agent-browser-doctor --fix`, which finds and repairs a disabled 1Password,
+  then try again. Never
   type, read or copy a password, and never use a script to read a field's value. If
   1Password has nothing for the site, stop and ask me.
 - One-time codes are yours to handle; don't ask me for them. When a sign-in you started

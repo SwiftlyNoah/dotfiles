@@ -10,8 +10,7 @@
 #
 # Package managers: Homebrew formulae and casks, the global npm CLIs below, and uv's
 # Pythons. Nix packages (Node, Python and the CLI tools) move forward through flake.lock, which a daily GitHub Action
-# updates, checks and pushes; a rebuild applies it. macOS, Chrome, VS Code, 1Password and
-# Claude Code update themselves.
+# updates, checks and pushes; a rebuild applies it. macOS and Claude Code update themselves.
 emulate -L zsh
 setopt err_exit no_unset pipe_fail
 export HOMEBREW_NO_ENV_HINTS=1
@@ -60,7 +59,27 @@ print -- "==> Homebrew"
 brew update --quiet
 export HOMEBREW_NO_AUTO_UPDATE=1 # just updated
 brew upgrade --formula
-brew upgrade --cask # casks that update themselves (Chrome, VS Code, 1Password) are skipped
+# Homebrew upgrades even the casks that say they update themselves (1Password, VS Code,
+# Chrome) once the app on disk is behind, which Chrome always is here: its own updater isn't
+# installed. Every cask but Chrome goes the plain way.
+outdated=(${(f)"$(brew outdated --cask --quiet)"})
+casks=(${outdated:#google-chrome})
+(( $#casks )) && brew upgrade --cask $casks
+# Chrome is replaced with the shared browsers closed (agent-browser-pause): run from under
+# them, they lost every sign-in on 2026-11-18. With another Chrome open (mine, or a
+# script's), which nothing closes for it, it waits for a run without one, saying so.
+chrome_note=
+if (( ${outdated[(Ie)google-chrome]} )); then
+  brew fetch --cask google-chrome # downloaded while everything still runs
+  print -- "==> Chrome (shared browsers closed)"
+  if "$REPO/home/bin/agent-browser-pause" brew upgrade --cask google-chrome; then
+    "$REPO/home/bin/agent-browser-doctor" --fix || chrome_note="Shared browsers after the Chrome upgrade: run agent-browser-doctor."
+  else
+    (( $? == 75 )) || exit 1
+    chrome_note="Chrome update waits: quit Chrome, then run mac-update --packages."
+    print -- $chrome_note
+  fi
+fi
 
 print -- "==> npm globals"
 npm install --global --no-fund --no-audit --loglevel=error ${^NPM_GLOBALS}@latest
@@ -76,6 +95,7 @@ print -- "Updated: ${(j:, :)changed:-nothing}"
 if [[ $mode == --scheduled ]]; then
   (( ${#changed} )) && notify "Updated ${#changed}: ${(j:, :)changed}"
   (( behind > 0 )) && notify "$behind dotfiles update(s) waiting, including Nix packages. Run mac-update."
+  [[ -n $chrome_note ]] && notify "$chrome_note"
 fi
 
 if [[ $mode == full ]]; then

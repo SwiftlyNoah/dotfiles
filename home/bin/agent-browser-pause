@@ -1,0 +1,67 @@
+#!/bin/zsh
+# Runs a command that replaces Chrome on disk with every shared browser closed, then starts
+# them again on the new Chrome, each session keeping its tabs.
+#
+#   agent-browser-pause <command> [args...]   exits with the command's status
+#
+# Why: Homebrew upgrades the google-chrome cask by deleting /Applications/Google Chrome.app
+# and moving the new one in, under every Chrome still running from it. On 2026-11-18 the
+# three shared browsers came back from that with every cookie gone (every sign-in) and one
+# with 1Password half installed and disabled as corrupt. Closed over DevTools first
+# (agent_browser_quit), Chrome saves its cookies and session, and the next one starts clean.
+#
+# Refuses, exit 75 with nothing closed, when the command would still run under a Chrome:
+# a shared browser that is downloading (a quit cuts it off), or any other Chrome on this Mac
+# (mine, or a script's), which it never closes.
+emulate -L zsh
+setopt no_unset
+source "${0:A:h:h}/lib/agent-browser.zsh"
+(( $# )) || { print -u2 -- "usage: agent-browser-pause <command> [args...]"; exit 2; }
+
+ids=(${(f)"$(agent_browser_ids)"})
+for id in $ids; do
+  agent_browser_instance $id
+  if agent_browser_downloading; then
+    print -u2 -- "agent-browser: the $id Chrome is downloading; not closing it"
+    exit 75
+  fi
+done
+others=(${(f)"$(agent_browser_other_chromes)"})
+if (( $#others )); then
+  print -u2 -- "agent-browser: another Chrome is open (process ${(j:, :)others}); not replacing Chrome under it"
+  exit 75
+fi
+
+snapshots=$(mktemp -d -t agent-browser-pause)
+agent_browser_hold_mark
+# Released however this ends, so the browsers never stay down past the command.
+trap 'agent_browser_hold_release; rm -rf "$snapshots"' EXIT
+trap 'exit 130' INT TERM HUP
+
+for id in $ids; do
+  (
+    agent_browser_instance $id
+    agent_browser_running || exit 0
+    agent_browser_node "$AGENT_BROWSER_PAGES" snapshot "http://127.0.0.1:$PORT" >"$snapshots/$id" 2>/dev/null || true
+    agent_browser_quit
+  ) &
+done
+wait
+
+"$@"
+rc=$?
+
+agent_browser_hold_release
+for id in $ids; do
+  (
+    agent_browser_instance $id
+    # Its launchd job (home/bin/agent-browser-chrome) starts it within seconds of the release.
+    if ! agent_browser_wait_up 60; then
+      print -u2 -- "agent-browser: the $id Chrome did not come back on port $PORT"
+      exit 1
+    fi
+    [[ -s $snapshots/$id ]] && agent_browser_node "$AGENT_BROWSER_PAGES" remap "http://127.0.0.1:$PORT" "$snapshots/$id" || true
+  ) &
+done
+wait
+exit $rc

@@ -239,7 +239,12 @@ and nothing waits on me remembering to update it.
   works, and pushes. The morning job tells me when that's waiting.
 - **`mac-update`** does all of it at once: pull, rebuild (Touch ID), upgrade everything, and
   run `mac-check`.
-- macOS, App Store apps, Chrome, VS Code, 1Password and Claude Code update themselves.
+- **Chrome** is upgraded with the shared browsers closed (`agent-browser-pause`):
+  Homebrew replaces the app by deleting it, and the shared browsers once lost every sign-in
+  running from under it. When another Chrome is open (mine, or a script's), the upgrade waits
+  for a morning without one and the notification says so. Afterwards `agent-browser-doctor
+  --fix` checks that 1Password works in each shared browser and repairs it if not.
+- macOS, App Store apps and Claude Code update themselves.
 
 The one exception is deploy days: `deployDays` in your own settings lists dates when the
 morning job leaves everything alone, so a CLI can't change under a release. It catches up
@@ -334,7 +339,8 @@ of that:
   Hammerspoon hides it again when I'm done. A session's pages close a few minutes after it
   ends (`home/lib/agent-browser-mcp/own-pages.mjs`), unless it's back by then (a pool
   switch restarts it); pages it didn't open stay. When Chrome restarts, each session keeps
-  its tabs.
+  its tabs. `agent-browser-doctor` checks that 1Password works in each one (`--fix`
+  restarts one whose 1Password Chrome disabled as corrupt, which reinstalls it).
 - **Hooks**: `guard.mjs` has a session check with me before what can't be undone,
   whatever the permission mode: sending or forwarding mail, trashing mail, events or Drive
   files, sharing a Drive file, a force push to main, deleting a repo, `rm -r` on my home
@@ -400,7 +406,8 @@ home/
   .config/herdr/          herdr's config and chimes (its runtime files aren't tracked)
   .hammerspoon/           app hotkeys (⌘⇧ A Chrome, D Messages, X Xcode, C Claude, W WezTerm, + your profiles; ⌥ + your browsers' keys)
   bin/                    mac-check, mac-update, github-setup, claude-setup,
-                          agent-browser-mcp, agent-browser-chrome, work-bootstrap, vpn
+                          agent-browser-mcp, agent-browser-chrome, agent-browser-pause,
+                          agent-browser-doctor, work-bootstrap, vpn
   lib/agent-browser.zsh   the shared browsers: ports, profiles, how Chrome starts
   lib/local-config.zsh    reads your own settings
   lib/agent-browser-mcp/  the browser server's npm pin
