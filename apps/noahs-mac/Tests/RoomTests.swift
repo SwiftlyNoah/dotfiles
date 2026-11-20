@@ -248,6 +248,27 @@ final class Tester {
       equal(infos(m).first, "Automations on · in the room")
     }
 
+    await test("the shared status fixtures: away, asleep, a stale bridge, the Halo on") {
+      let away = menu(.live(room("status-away.json")), now: "2030-01-18T12:00:00-05:00")
+      equal(away.header, "Room · Away · 67.3°F")
+      equal(infos(away), ["Automations on"])
+      equal(items(away).first { $0.action == .roomOff }?.checked, true)
+      equal(RoomIcon.of(.live(room("status-away.json")), palette: [:]), .plain)
+
+      let sleep = menu(.live(room("status-sleep.json")), now: "2030-01-16T01:00:00-05:00")
+      equal(sleep.header, "Room · Sleep · 69.1°F")
+      equal(infos(sleep), ["Automations on · in the room", "Next: Wake ramp at 7:40 am"])
+      equal(items(sleep).filter(\.checked).map(\.title), ["Lights out"])
+
+      let stale = menu(.live(room("status-bridge-stale.json")))
+      equal(infos(stale).prefix(2), [
+        "Automations on · at the desk", "The Hue Bridge hasn't answered since 8:41 pm, so the room shows its last read.",
+      ])
+
+      let halo = menu(.live(room("status-halo-on.json")))
+      equal(items(halo).filter(\.checked).map(\.title), ["Focus", "Focus"])
+    }
+
     await test("notices show under the state line") {
       let r = room("cli/status.json") { o in
         o["notices"] = [["key": "light_service_down", "text": "The light service isn't running"]]
@@ -272,7 +293,9 @@ final class Tester {
     }
 
     await test("the Halo is never in the menu") {
-      for path in ["cli/status.json", "status-halo-on.json", "status-paused-hands-off.json", "status-paused-by-hand.json"] {
+      let statuses = try FileManager.default.contentsOfDirectory(atPath: fixtures.path).filter { $0.hasPrefix("status-") } + ["cli/status.json"]
+      expect(statuses.count == 9, "\(statuses.count) status fixtures")
+      for path in statuses {
         let all = words(menu(.live(room(path))))
         expect(!all.contains { $0.localizedCaseInsensitiveContains("halo") }, "\(path) shows the Halo")
       }
@@ -436,11 +459,11 @@ final class Tester {
     func feed() -> RoomFeed { RoomFeed(cli: cli, backoff: [0.05, 0.1, 0.2], settled: 0.3) }
 
     await test("status, then each watch line, live") {
-      set("watch", fixtures.appending(path: "status-paused-hands-off.json").path)
+      set("watch", fixtures.appending(path: "status-paused-by-hand.json").path)
       set("watch-hold", "2")
       let f = feed()
       f.start()
-      expect(await until { f.state.now?.paused?.by == "hands_off" }, "the watch line arrived")
+      expect(await until { f.state.now?.paused?.by == "by_hand" }, "the watch line arrived")
       equal(calls.prefix(2), ["room status --json --client menubar", "room watch --client menubar"])
       f.stop()
     }

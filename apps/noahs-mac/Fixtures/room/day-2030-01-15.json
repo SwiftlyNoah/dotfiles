@@ -1,0 +1,152 @@
+{
+  "fixture": "room-fixture/1",
+  "schema": "room-day/1",
+  "day": "2030-01-15",
+  "from": "2030-01-15T04:00:00-05:00",
+  "to": "2030-01-16T04:00:00-05:00",
+  "built_at": "2030-01-16T08:02:00-05:00",
+  "partial": false,
+  "gaps": [
+    {
+      "from": "2030-01-15T13:02:00-05:00",
+      "to": "2030-01-15T13:09:00-05:00",
+      "why": "service_down"
+    }
+  ],
+  "presence": {
+    "data_classes": [
+      "presence"
+    ],
+    "entries": {
+      "about": 5,
+      "sure": 3,
+      "likely": 2
+    },
+    "short_trips": 2,
+    "first_motion_at": "2030-01-15T07:52:10-05:00",
+    "last_motion_at": "2030-01-16T00:20:41-05:00",
+    "left_for_day_at": "2030-01-15T09:05:00-05:00",
+    "in_room_awake_min": 365,
+    "desk_min": 230,
+    "guesses": [
+      {
+        "at": "2030-01-15T10:30:00-05:00",
+        "kind": "entry",
+        "confidence": "likely",
+        "gap_min": 82,
+        "why": "no screen lock before it",
+        "mark": null
+      }
+    ]
+  },
+  "lights": {
+    "data_classes": [],
+    "on_min": {
+      "bar-left": 310,
+      "bar-right": 310,
+      "fan-desk": 145,
+      "fan-far": 160
+    },
+    "halo_on_min": null,
+    "scenes": [
+      {
+        "scene": "arrive",
+        "count": 3,
+        "by": {
+          "rule": 3,
+          "schedule": 0,
+          "automation": 0,
+          "me": 0
+        }
+      },
+      {
+        "scene": "evening",
+        "count": 1,
+        "by": {
+          "rule": 0,
+          "schedule": 0,
+          "automation": 1,
+          "me": 0
+        }
+      }
+    ],
+    "rule_fires": {
+      "A1": 3,
+      "A7": 1,
+      "A9": 1
+    },
+    "overrides": [
+      {
+        "at": "2030-01-15T21:12:00-05:00",
+        "what": "Left bar to rose",
+        "via": "portal",
+        "scene_before": "evening",
+        "within_min_of_scene": 133
+      }
+    ]
+  },
+  "environment": {
+    "data_classes": [],
+    "temp_c": {
+      "min": 20.1,
+      "max": 22.3,
+      "mean": 21.2
+    },
+    "dark_min": 610,
+    "daylight_lux_max": 160
+  },
+  "night": {
+    "data_classes": [
+      "health"
+    ],
+    "complete": true,
+    "wind_down": {
+      "planned_at": "2030-01-15T23:30:00-05:00",
+      "state": "ran"
+    },
+    "lights_out": {
+      "planned_at": "2030-01-16T00:15:00-05:00",
+      "at": "2030-01-16T00:31:00-05:00",
+      "late_min": 16,
+      "by": "me"
+    },
+    "up_at_night": [
+      {
+        "from": "2030-01-16T03:12:00-05:00",
+        "minutes": 2
+      }
+    ],
+    "left_at_night": [],
+    "up_for_day_at": "2030-01-16T07:51:00-05:00",
+    "wake_ramp": {
+      "planned_at": "2030-01-16T07:40:00-05:00",
+      "state": "ran"
+    },
+    "temp_overnight_c": {
+      "min": {
+        "c": 19.9,
+        "at": "2030-01-16T05:45:00-05:00"
+      },
+      "max": 21,
+      "mean": 20.4,
+      "series": [
+        [
+          "2030-01-16T00:35:00-05:00",
+          20.9
+        ],
+        [
+          "2030-01-16T02:35:00-05:00",
+          20.3
+        ],
+        [
+          "2030-01-16T05:45:00-05:00",
+          19.9
+        ],
+        [
+          "2030-01-16T07:35:00-05:00",
+          20.2
+        ]
+      ]
+    }
+  }
+}

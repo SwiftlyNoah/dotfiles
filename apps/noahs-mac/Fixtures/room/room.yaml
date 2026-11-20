@@ -1,0 +1,63 @@
+# The room's config (contract section 4). Invented test copy: the scene values are public anyway.
+schema_version: 1
+lights:
+  bar-left:  {bridge: "2", label: Left bar}
+  bar-right: {bridge: "1", label: Right bar}
+  fan-desk:  {bridge: "3", label: "Fan, desk side", startup: {bri: 254, ct: 370}}
+  fan-far:   {bridge: "4", label: "Fan, far side",  startup: {bri: 254, ct: 370}}
+groups:
+  room: {name: Room, type: Room, class: Bedroom, lights: [bar-left, bar-right, fan-desk, fan-far]}
+  bars: {name: Bars, type: Zone, lights: [bar-left, bar-right]}
+  fan:  {name: Fan,  type: Zone, lights: [fan-desk, fan-far]}
+palette:
+  lilac: {xy: [0.2875, 0.2024], hex: "#c4a7e7", tuned: true}
+  rose: {xy: [0.4553, 0.3353], hex: "#ea9a97", tuned: false}
+  gold: {xy: [0.4700, 0.4300], hex: "#f6c177", tuned: false}
+  foam: {xy: [0.2425, 0.3095], hex: "#9ccfd8", tuned: false}
+  pine: {xy: [0.1602, 0.2290], hex: "#3e8fb0", tuned: false}
+  "warm white": {xy: [0.4578, 0.4101], hex: "#ffd9b0", tuned: false}
+  "cool white": {xy: [0.3324, 0.3474], hex: "#f2f1ff", tuned: false}
+  ember: {xy: [0.6400, 0.3400], hex: "#e5622e", tuned: false}
+scenes:
+  # A light is `off`, {color, bri} or {ct, bri}. The Halo is `off` or {mode, kelvin, brightness},
+  # with only_if_on: true to change it only when it is already on. Values are what goes to the device.
+  arrive: {n: 1, name: Arrive, family: everyday, bar-left: {color: lilac, bri: 140}, bar-right: {color: lilac, bri: 140}, fan-desk: {ct: 370, bri: 178}, fan-far: {ct: 370, bri: 178}, halo: off}
+  arrive-late: {n: 2, name: Arrive late, family: everyday, bar-left: {color: lilac, bri: 76}, bar-right: {color: lilac, bri: 76}, fan-desk: {ct: 417, bri: 89}, fan-far: {ct: 417, bri: 89}, halo: off}
+  focus: {n: 3, name: Focus, family: everyday, bar-left: {color: cool white, bri: 64}, bar-right: {color: cool white, bri: 64}, fan-desk: {ct: 250, bri: 178}, fan-far: {ct: 250, bri: 178}, halo: {mode: front, kelvin: 4000, brightness: 70}}
+  evening: {n: 4, name: Evening, family: everyday, bar-left: {color: lilac, bri: 114}, bar-right: {color: lilac, bri: 114}, fan-desk: {ct: 370, bri: 114}, fan-far: {ct: 370, bri: 114}, halo: {mode: front, kelvin: 3000, brightness: 45, only_if_on: true}}
+  bright: {n: 5, name: Bright, family: everyday, bar-left: {color: cool white, bri: 152}, bar-right: {color: cool white, bri: 152}, fan-desk: {ct: 200, bri: 254}, fan-far: {ct: 200, bri: 254}, halo: {mode: front, kelvin: 5000, brightness: 80}}
+  call: {n: 6, name: Call, family: moods, bar-left: {color: lilac, bri: 76}, bar-right: {color: lilac, bri: 76}, fan-desk: {ct: 286, bri: 140}, fan-far: {ct: 286, bri: 140}, halo: {mode: front, kelvin: 4500, brightness: 60}}
+  watch: {n: 7, name: Watch, family: moods, bar-left: {color: warm white, bri: 51}, bar-right: {color: warm white, bri: 51}, fan-desk: off, fan-far: off, halo: off}
+  lilac-moon: {n: 8, name: Lilac Moon, family: moods, bar-left: {color: lilac, bri: 203}, bar-right: {color: rose, bri: 178}, fan-desk: {color: lilac, bri: 64}, fan-far: {color: foam, bri: 38}, halo: {mode: back, kelvin: 2700, brightness: 20}}
+  wind-down: {n: 9, name: Wind down, family: sleep, bar-left: {color: gold, bri: 64}, bar-right: {color: gold, bri: 64}, fan-desk: off, fan-far: {ct: 455, bri: 64}, halo: {mode: back, kelvin: 2700, brightness: 15}}
+  last-call: {n: 10, name: Last call, family: sleep, bar-left: {color: ember, bri: 25}, bar-right: {color: ember, bri: 25}, fan-desk: off, fan-far: {ct: 500, bri: 20}, halo: off}
+  lights-out: {n: 11, name: Lights out, family: sleep, bar-left: off, bar-right: off, fan-desk: off, fan-far: off, halo: off}
+  night-path: {n: 12, name: Night path, family: sleep, bar-left: {color: ember, bri: 4}, bar-right: {color: ember, bri: 4}, fan-desk: off, fan-far: {color: ember, bri: 1}, halo: off}
+  wake: {n: 13, name: Wake, family: sleep, bar-left: {color: warm white, bri: 102}, bar-right: {color: warm white, bri: 102}, fan-desk: {ct: 250, bri: 203}, fan-far: {ct: 250, bri: 203}, halo: off}
+  away: {n: 14, name: Away, family: system, bar-left: off, bar-right: off, fan-desk: off, fan-far: off, halo: off}
+modes:
+  day:       {default_scene: arrive}
+  evening:   {default_scene: evening}
+  late:      {default_scene: arrive-late}
+  wind_down: {default_scene: wind-down}
+clock:
+  evening_at: "19:00"
+  late_at: "22:00"
+  wind_down_before_bed_min: 45
+  last_call_before_bed_min: 15
+  lights_out_fade_s: 10
+  wake_ramp_before_wake_min: 20
+  wake_ramp_clock_tolerance_s: 30
+quiet: {dim_after_min: 20, off_after_min: 25, dim_bri: 51, dim_fade_ds: 100, off_fade_ds: 50}
+night_path: {off_after_s: 90}
+away: {after_h: 3}
+hands_off: {max_min: 120}
+pause: {min_min: 15, max_min: 720}
+desk: {hid_idle_max_min: 10, halo_dial_min: 15, renew_every_s: 60, bridge_expiry_min: 15}
+visits: {merge_bursts_s: 60, same_visit_max_min: 3, short_trip_max_min: 10, sure_lock_within_min: 2}
+evening_drift_fade_ds: 6000
+wake_ramp:
+  - {at_min: 20, target: fan,  state: {on: true, ct: 500, bri: 3}}
+  - {at_min: 20, delay_s: 2, target: fan, state: {ct: 370, bri: 89, transitiontime: 5980}}
+  - {at_min: 10, target: fan,  state: {ct: 250, bri: 203, transitiontime: 6000}}
+  - {at_min: 10, target: bars, state: {on: true, xy: warm white, bri: 102, transitiontime: 6000}}

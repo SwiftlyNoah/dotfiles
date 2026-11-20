@@ -5,7 +5,7 @@
     "ok": true,
     "scene": "away",
     "number": 14,
-    "at": "2030-01-15T20:45:00.120-05:00",
+    "at": "2030-01-15T20:45:00.010-05:00",
     "fade_s": 0,
     "lights": {
       "bar-left": "ok",
@@ -15,8 +15,8 @@
     },
     "halo": "not_set_up",
     "by": {
-      "client": "cli",
-      "who": "Terminal"
+      "client": "menubar",
+      "who": "the menu bar"
     }
   }
 }

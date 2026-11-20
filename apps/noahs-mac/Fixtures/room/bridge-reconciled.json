@@ -1,0 +1,2046 @@
+{
+  "fixture": "room-fixture/1",
+  "key": "fakeBridgeKey0123456789abcdefABCDEF",
+  "config": {
+    "name": "Philips hue",
+    "zigbeechannel": 25,
+    "bridgeid": "000000FFFE00C0DE",
+    "mac": "00:00:00:00:c0:de",
+    "dhcp": true,
+    "ipaddress": "127.0.0.1",
+    "netmask": "255.255.255.0",
+    "gateway": "127.0.0.1",
+    "proxyaddress": "none",
+    "proxyport": 0,
+    "UTC": "2030-01-16T01:41:07",
+    "localtime": "2030-01-15T20:41:07",
+    "timezone": "America/New_York",
+    "modelid": "BSB002",
+    "datastoreversion": "103",
+    "swversion": "1940042020",
+    "apiversion": "1.40.0",
+    "swupdate2": {
+      "state": "noupdates",
+      "bridge": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      }
+    },
+    "linkbutton": false,
+    "portalservices": false,
+    "portalconnection": "disconnected",
+    "factorynew": false,
+    "replacesbridgeid": null,
+    "starterkitid": "",
+    "whitelist": {
+      "fakeBridgeKey0123456789abcdefABCDEF": {
+        "last use date": "2030-01-16T01:41:07",
+        "create date": "2029-12-01T10:00:00",
+        "name": "noah-os#light service"
+      }
+    }
+  },
+  "lights": {
+    "1": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Hue play 1",
+      "modelid": "LCT024",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue play",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 540,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "hueplay",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "safety",
+          "configured": true
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:01-0b",
+      "swversion": "1.104.2"
+    },
+    "2": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Hue play 2",
+      "modelid": "LCT024",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue play",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 540,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "hueplay",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "safety",
+          "configured": true
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:02-0b",
+      "swversion": "1.104.2"
+    },
+    "3": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Fan desk side",
+      "modelid": "LCA013",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue color lamp",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 806,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "sultanbulb",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "custom",
+          "configured": true,
+          "customsettings": {
+            "bri": 254,
+            "ct": 370
+          }
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:03-0b",
+      "swversion": "1.104.2"
+    },
+    "4": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Fan far side",
+      "modelid": "LCA013",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue color lamp",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 806,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "sultanbulb",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "custom",
+          "configured": true,
+          "customsettings": {
+            "bri": 254,
+            "ct": 370
+          }
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:04-0b",
+      "swversion": "1.104.2"
+    }
+  },
+  "sensors": {
+    "1": {
+      "state": {
+        "daylight": false,
+        "lastupdated": "2030-01-15T22:01:00"
+      },
+      "config": {
+        "on": true,
+        "configured": true,
+        "sunriseoffset": 30,
+        "sunsetoffset": -30
+      },
+      "name": "Daylight",
+      "type": "Daylight",
+      "modelid": "PHDL00",
+      "manufacturername": "Signify Netherlands B.V.",
+      "swversion": "1.0"
+    },
+    "2": {
+      "state": {
+        "temperature": 2141,
+        "lastupdated": "2030-01-16T01:39:00"
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "config": {
+        "on": true,
+        "battery": 100,
+        "reachable": true,
+        "alert": "none",
+        "ledindication": false,
+        "usertest": false,
+        "pending": []
+      },
+      "name": "Hue temperature sensor 1",
+      "type": "ZLLTemperature",
+      "modelid": "SML001",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue temperature sensor",
+      "swversion": "6.1.1.27575",
+      "uniqueid": "00:17:88:01:00:00:00:0a-02-0402",
+      "capabilities": {
+        "certified": true,
+        "primary": false
+      }
+    },
+    "3": {
+      "state": {
+        "presence": false,
+        "lastupdated": "2030-01-16T01:40:27"
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "config": {
+        "on": true,
+        "battery": 100,
+        "reachable": true,
+        "alert": "none",
+        "sensitivity": 3,
+        "sensitivitymax": 4,
+        "ledindication": false,
+        "usertest": false,
+        "pending": []
+      },
+      "name": "Hue motion sensor 1",
+      "type": "ZLLPresence",
+      "modelid": "SML001",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue motion sensor",
+      "swversion": "6.1.1.27575",
+      "uniqueid": "00:17:88:01:00:00:00:0a-02-0406",
+      "capabilities": {
+        "certified": true,
+        "primary": true
+      }
+    },
+    "4": {
+      "state": {
+        "lightlevel": 10792,
+        "dark": true,
+        "daylight": false,
+        "lastupdated": "2030-01-16T01:38:10"
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "config": {
+        "on": true,
+        "battery": 100,
+        "reachable": true,
+        "alert": "none",
+        "tholddark": 16000,
+        "tholdoffset": 7000,
+        "ledindication": false,
+        "usertest": false,
+        "pending": []
+      },
+      "name": "Hue ambient light sensor 1",
+      "type": "ZLLLightLevel",
+      "modelid": "SML001",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue ambient light sensor",
+      "swversion": "6.1.1.27575",
+      "uniqueid": "00:17:88:01:00:00:00:0a-02-0400",
+      "capabilities": {
+        "certified": true,
+        "primary": false
+      }
+    },
+    "5": {
+      "state": {
+        "status": 0,
+        "lastupdated": "2030-01-15T11:00:00"
+      },
+      "config": {
+        "on": true,
+        "reachable": true
+      },
+      "name": "room.mode",
+      "type": "CLIPGenericStatus",
+      "modelid": "noah-os-room",
+      "manufacturername": "noah-os",
+      "swversion": "1",
+      "uniqueid": "noah-os.room.mode",
+      "recycle": false
+    },
+    "6": {
+      "state": {
+        "status": 0,
+        "lastupdated": "2030-01-15T11:00:00"
+      },
+      "config": {
+        "on": true,
+        "reachable": true
+      },
+      "name": "room.desk",
+      "type": "CLIPGenericStatus",
+      "modelid": "noah-os-room",
+      "manufacturername": "noah-os",
+      "swversion": "1",
+      "uniqueid": "noah-os.room.desk",
+      "recycle": false
+    },
+    "7": {
+      "state": {
+        "status": 0,
+        "lastupdated": "2030-01-15T11:00:00"
+      },
+      "config": {
+        "on": true,
+        "reachable": true
+      },
+      "name": "room.paused",
+      "type": "CLIPGenericStatus",
+      "modelid": "noah-os-room",
+      "manufacturername": "noah-os",
+      "swversion": "1",
+      "uniqueid": "noah-os.room.paused",
+      "recycle": false
+    },
+    "8": {
+      "state": {
+        "status": 0,
+        "lastupdated": "2030-01-15T11:00:00"
+      },
+      "config": {
+        "on": true,
+        "reachable": true
+      },
+      "name": "room.scene",
+      "type": "CLIPGenericStatus",
+      "modelid": "noah-os-room",
+      "manufacturername": "noah-os",
+      "swversion": "1",
+      "uniqueid": "noah-os.room.scene",
+      "recycle": false
+    },
+    "9": {
+      "state": {
+        "flag": false,
+        "lastupdated": "2030-01-15T11:00:00"
+      },
+      "config": {
+        "on": true,
+        "reachable": true
+      },
+      "name": "room.night",
+      "type": "CLIPGenericFlag",
+      "modelid": "noah-os-room",
+      "manufacturername": "noah-os",
+      "swversion": "1",
+      "uniqueid": "noah-os.room.night",
+      "recycle": false
+    }
+  },
+  "groups": {
+    "1": {
+      "name": "Room",
+      "lights": [
+        "2",
+        "1",
+        "3",
+        "4"
+      ],
+      "sensors": [],
+      "type": "Room",
+      "state": {
+        "all_on": false,
+        "any_on": false
+      },
+      "recycle": false,
+      "class": "Bedroom",
+      "action": {
+        "on": false,
+        "bri": 254,
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "colormode": "ct",
+        "alert": "none"
+      }
+    },
+    "2": {
+      "name": "Bars",
+      "lights": [
+        "2",
+        "1"
+      ],
+      "sensors": [],
+      "type": "Zone",
+      "state": {
+        "all_on": false,
+        "any_on": false
+      },
+      "recycle": false,
+      "class": "Other",
+      "action": {
+        "on": false,
+        "bri": 254,
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "colormode": "ct",
+        "alert": "none"
+      }
+    },
+    "3": {
+      "name": "Fan",
+      "lights": [
+        "3",
+        "4"
+      ],
+      "sensors": [],
+      "type": "Zone",
+      "state": {
+        "all_on": false,
+        "any_on": false
+      },
+      "recycle": false,
+      "class": "Other",
+      "action": {
+        "on": false,
+        "bri": 254,
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "colormode": "ct",
+        "alert": "none"
+      }
+    }
+  },
+  "scenes": {
+    "nosScene01": {
+      "name": "Arrive",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:arrive"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 140,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 140,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 178,
+          "ct": 370
+        },
+        "4": {
+          "on": true,
+          "bri": 178,
+          "ct": 370
+        }
+      }
+    },
+    "nosScene02": {
+      "name": "Arrive late",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:arrive-late"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 76,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 76,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 89,
+          "ct": 417
+        },
+        "4": {
+          "on": true,
+          "bri": 89,
+          "ct": 417
+        }
+      }
+    },
+    "nosScene03": {
+      "name": "Focus",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:focus"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 64,
+          "xy": [
+            0.3324,
+            0.3474
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 64,
+          "xy": [
+            0.3324,
+            0.3474
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 178,
+          "ct": 250
+        },
+        "4": {
+          "on": true,
+          "bri": 178,
+          "ct": 250
+        }
+      }
+    },
+    "nosScene04": {
+      "name": "Evening",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:evening"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 114,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 114,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 114,
+          "ct": 370
+        },
+        "4": {
+          "on": true,
+          "bri": 114,
+          "ct": 370
+        }
+      }
+    },
+    "nosScene05": {
+      "name": "Bright",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:bright"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 152,
+          "xy": [
+            0.3324,
+            0.3474
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 152,
+          "xy": [
+            0.3324,
+            0.3474
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 254,
+          "ct": 200
+        },
+        "4": {
+          "on": true,
+          "bri": 254,
+          "ct": 200
+        }
+      }
+    },
+    "nosScene06": {
+      "name": "Call",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:call"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 76,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 76,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 140,
+          "ct": 286
+        },
+        "4": {
+          "on": true,
+          "bri": 140,
+          "ct": 286
+        }
+      }
+    },
+    "nosScene07": {
+      "name": "Watch",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:watch"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 51,
+          "xy": [
+            0.4578,
+            0.4101
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 51,
+          "xy": [
+            0.4578,
+            0.4101
+          ]
+        },
+        "3": {
+          "on": false
+        },
+        "4": {
+          "on": false
+        }
+      }
+    },
+    "nosScene08": {
+      "name": "Lilac Moon",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:lilac-moon"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 178,
+          "xy": [
+            0.4553,
+            0.3353
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 203,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 64,
+          "xy": [
+            0.2875,
+            0.2024
+          ]
+        },
+        "4": {
+          "on": true,
+          "bri": 38,
+          "xy": [
+            0.2425,
+            0.3095
+          ]
+        }
+      }
+    },
+    "nosScene09": {
+      "name": "Wind down",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:wind-down"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 64,
+          "xy": [
+            0.47,
+            0.43
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 64,
+          "xy": [
+            0.47,
+            0.43
+          ]
+        },
+        "3": {
+          "on": false
+        },
+        "4": {
+          "on": true,
+          "bri": 64,
+          "ct": 455
+        }
+      }
+    },
+    "nosScene10": {
+      "name": "Last call",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:last-call"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 25,
+          "xy": [
+            0.64,
+            0.34
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 25,
+          "xy": [
+            0.64,
+            0.34
+          ]
+        },
+        "3": {
+          "on": false
+        },
+        "4": {
+          "on": true,
+          "bri": 20,
+          "ct": 500
+        }
+      }
+    },
+    "nosScene11": {
+      "name": "Lights out",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:lights-out"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": false
+        },
+        "2": {
+          "on": false
+        },
+        "3": {
+          "on": false
+        },
+        "4": {
+          "on": false
+        }
+      }
+    },
+    "nosScene12": {
+      "name": "Night path",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:night-path"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 4,
+          "xy": [
+            0.64,
+            0.34
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 4,
+          "xy": [
+            0.64,
+            0.34
+          ]
+        },
+        "3": {
+          "on": false
+        },
+        "4": {
+          "on": true,
+          "bri": 1,
+          "xy": [
+            0.64,
+            0.34
+          ]
+        }
+      }
+    },
+    "nosScene13": {
+      "name": "Wake",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:wake"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": true,
+          "bri": 102,
+          "xy": [
+            0.4578,
+            0.4101
+          ]
+        },
+        "2": {
+          "on": true,
+          "bri": 102,
+          "xy": [
+            0.4578,
+            0.4101
+          ]
+        },
+        "3": {
+          "on": true,
+          "bri": 203,
+          "ct": 250
+        },
+        "4": {
+          "on": true,
+          "bri": 203,
+          "ct": 250
+        }
+      }
+    },
+    "nosScene14": {
+      "name": "Away",
+      "type": "GroupScene",
+      "group": "1",
+      "lights": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "recycle": false,
+      "locked": false,
+      "appdata": {
+        "version": 1,
+        "data": "nos:away"
+      },
+      "picture": "",
+      "lastupdated": "2030-01-15T11:00:00",
+      "version": 2,
+      "lightstates": {
+        "1": {
+          "on": false
+        },
+        "2": {
+          "on": false
+        },
+        "3": {
+          "on": false
+        },
+        "4": {
+          "on": false
+        }
+      }
+    }
+  },
+  "rules": {
+    "1": {
+      "name": "nos A1 arrive dark",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/4/state/dark",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "gt",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "lt",
+          "value": "3"
+        },
+        {
+          "address": "/groups/1/state/any_on",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene01"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 1
+          }
+        }
+      ]
+    },
+    "2": {
+      "name": "nos A2 arrive late",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/4/state/dark",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "3"
+        },
+        {
+          "address": "/groups/1/state/any_on",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene02"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 2
+          }
+        }
+      ]
+    },
+    "3": {
+      "name": "nos A3 arrive wind down",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/4/state/dark",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "4"
+        },
+        {
+          "address": "/groups/1/state/any_on",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene09"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 9
+          }
+        }
+      ]
+    },
+    "4": {
+      "name": "nos A4 back dark",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "6"
+        },
+        {
+          "address": "/sensors/4/state/dark",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene01"
+          }
+        },
+        {
+          "address": "/sensors/5/state",
+          "method": "PUT",
+          "body": {
+            "status": 2
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 1
+          }
+        }
+      ]
+    },
+    "5": {
+      "name": "nos A4 back light",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "6"
+        },
+        {
+          "address": "/sensors/4/state/dark",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/sensors/5/state",
+          "method": "PUT",
+          "body": {
+            "status": 2
+          }
+        }
+      ]
+    },
+    "6": {
+      "name": "nos A6 desk expires",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/6/state/status",
+          "operator": "gt",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/6/state/status",
+          "operator": "ddx",
+          "value": "PT00:15:00"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/sensors/6/state",
+          "method": "PUT",
+          "body": {
+            "status": 0
+          }
+        }
+      ]
+    },
+    "7": {
+      "name": "nos A7 dim quiet",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "ddx",
+          "value": "PT00:20:00"
+        },
+        {
+          "address": "/sensors/6/state/status",
+          "operator": "eq",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "gt",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "lt",
+          "value": "5"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        },
+        {
+          "address": "/groups/1/state/any_on",
+          "operator": "eq",
+          "value": "true"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "bri": 51,
+            "transitiontime": 100
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 90
+          }
+        }
+      ]
+    },
+    "8": {
+      "name": "nos A8 back day",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/8/state/status",
+          "operator": "eq",
+          "value": "90"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "1"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene01"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 1
+          }
+        }
+      ]
+    },
+    "9": {
+      "name": "nos A8 back evening",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/8/state/status",
+          "operator": "eq",
+          "value": "90"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "2"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene04"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 4
+          }
+        }
+      ]
+    },
+    "10": {
+      "name": "nos A8 back late",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/8/state/status",
+          "operator": "eq",
+          "value": "90"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "3"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene02"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 2
+          }
+        }
+      ]
+    },
+    "11": {
+      "name": "nos A8 back wind down",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/8/state/status",
+          "operator": "eq",
+          "value": "90"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "4"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene09"
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 9
+          }
+        }
+      ]
+    },
+    "12": {
+      "name": "nos A9 off quiet",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "ddx",
+          "value": "PT00:25:00"
+        },
+        {
+          "address": "/sensors/6/state/status",
+          "operator": "eq",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "gt",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "lt",
+          "value": "5"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "eq",
+          "value": "0"
+        },
+        {
+          "address": "/groups/1/state/any_on",
+          "operator": "eq",
+          "value": "true"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "on": false,
+            "transitiontime": 50
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 91
+          }
+        }
+      ]
+    },
+    "13": {
+      "name": "nos A14 night path",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "true"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "dx"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "eq",
+          "value": "5"
+        },
+        {
+          "address": "/groups/1/state/any_on",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "lt",
+          "value": "2"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "scene": "nosScene12"
+          }
+        },
+        {
+          "address": "/sensors/9/state",
+          "method": "PUT",
+          "body": {
+            "flag": true
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 12
+          }
+        }
+      ]
+    },
+    "14": {
+      "name": "nos A15 night path off",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "ddx",
+          "value": "PT00:01:30"
+        },
+        {
+          "address": "/sensors/9/state/flag",
+          "operator": "eq",
+          "value": "true"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "on": false,
+            "transitiontime": 50
+          }
+        },
+        {
+          "address": "/sensors/9/state",
+          "method": "PUT",
+          "body": {
+            "flag": false
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 92
+          }
+        }
+      ]
+    },
+    "15": {
+      "name": "nos A17 away fallback",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "eq",
+          "value": "false"
+        },
+        {
+          "address": "/sensors/3/state/presence",
+          "operator": "ddx",
+          "value": "PT03:00:00"
+        },
+        {
+          "address": "/sensors/6/state/status",
+          "operator": "eq",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "gt",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/5/state/status",
+          "operator": "lt",
+          "value": "5"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/groups/1/action",
+          "method": "PUT",
+          "body": {
+            "on": false,
+            "transitiontime": 50
+          }
+        },
+        {
+          "address": "/sensors/5/state",
+          "method": "PUT",
+          "body": {
+            "status": 6
+          }
+        },
+        {
+          "address": "/sensors/8/state",
+          "method": "PUT",
+          "body": {
+            "status": 93
+          }
+        }
+      ]
+    },
+    "16": {
+      "name": "nos P1 pause expires",
+      "owner": "fakeBridgeKey0123456789abcdefABCDEF",
+      "created": "2030-01-15T11:00:00",
+      "lasttriggered": "none",
+      "timestriggered": 0,
+      "status": "enabled",
+      "recycle": false,
+      "conditions": [
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "gt",
+          "value": "0"
+        },
+        {
+          "address": "/sensors/7/state/status",
+          "operator": "ddx",
+          "value": "PT12:05:00"
+        }
+      ],
+      "actions": [
+        {
+          "address": "/sensors/7/state",
+          "method": "PUT",
+          "body": {
+            "status": 0
+          }
+        }
+      ]
+    }
+  },
+  "schedules": {}
+}
