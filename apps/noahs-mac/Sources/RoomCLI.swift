@@ -53,14 +53,22 @@ struct RoomCLI: Sendable {
     let end = await child.finished()
     timer.cancel()
     if end.killed { return .failed("noah room \(args[1]) didn't answer in \(Int(timeout)) s") }
-    return Self.outcome(code: end.code, stdout: end.stdout, stderr: end.stderr)
+    return Self.outcome(code: end.code, stdout: end.stdout, stderr: end.stderr, command: args[1])
   }
 
-  static func outcome(code: Int32, stdout: Data, stderr: Data) -> RoomOutcome {
+  /// The words for a failure are noah-os's own JSON `error` when it printed one. Plain stderr goes
+  /// to the log only, and the menu or alert gets a fixed sentence pointing there.
+  static func outcome(code: Int32, stdout: Data, stderr: Data, command: String) -> RoomOutcome {
     let error = errorObject(stdout) ?? errorObject(stderr)
     if code == 4 || error?.code == "room_service_down" { return .down }
     if code == 0 { return .ok(stdout) }
-    let why = error?.message ?? lastLine(stderr) ?? "noah room exited with \(code)"
+    var why = "noah room \(command) exited with \(code)"
+    if let message = error?.message {
+      why = message
+    } else if let line = lastLine(stderr) {
+      logLine("room: noah room \(command) exited \(code): \(line)")
+      why = "noah room \(command) failed. The details are in ~/Library/Logs/noahs-mac.log."
+    }
     switch code {
     case 2: return .usage(why)
     case 3: return .refused(why)
@@ -270,15 +278,26 @@ final class RoomFeed {
           let code = await watch()
           if stopped { return }
           if Date().timeIntervalSince(started) >= settled { misses = 0 }
-          if code == 4 { set(.down) }
-          if code == 2 { set(.unavailable(RoomCLI.notInstalled)) }
+          switch code {
+          case 4: set(.down)
+          case 2:
+            // status knew the room commands a moment ago, so this isn't a missing CLI.
+            logLine("room: noah room watch exited 2 (usage)")
+            set(.failed(.watch))
+          default:
+            logLine("room: noah room watch exited \(code)")
+            set(.reconnecting)
+          }
         } else {
-          set(.failed("noah room status printed something I can't read"))
+          logLine("room: noah room status printed something that isn't RoomNow")
+          set(.failed(.status))
         }
       case .down: set(.down)
       case .usage: set(.unavailable(RoomCLI.notInstalled))
       case .missing(let why): set(.unavailable(why))
-      case .refused(let why), .failed(let why): set(.failed(why))
+      case .refused(let why), .failed(let why):
+        logLine("room: noah room status: \(why)")
+        set(.failed(.status))
       }
       if stopped { return }
       await pause(backoff[min(misses, backoff.count - 1)])
@@ -329,7 +348,8 @@ final class RoomFeed {
     case .live: "live"
     case .down: "the room service isn't running"
     case .unavailable(let why): why
-    case .failed(let why): "failed: \(why)"
+    case .reconnecting: "reconnecting"
+    case .failed(let failure): failure.sentence
     }
   }
 

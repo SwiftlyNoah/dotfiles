@@ -184,12 +184,27 @@ enum RoomState: Equatable, Sendable {
   case down
   /// There is no `noah room` to ask: noah-os isn't on this Mac, or it predates the room commands.
   case unavailable(String)
-  /// `noah room status` failed some other way.
-  case failed(String)
+  /// The watch ended on its own; until status answers again, what it showed may be old.
+  case reconnecting
+  /// `noah room status` or `watch` failed some other way. The details go to the log, never the
+  /// menu.
+  case failed(RoomFailure)
 
   var now: RoomNow? {
     if case .live(let now) = self { return now }
     return nil
+  }
+}
+
+enum RoomFailure: Equatable, Sendable {
+  case status
+  case watch
+
+  var sentence: String {
+    switch self {
+    case .status: "noah room status failed, trying again"
+    case .watch: "noah room watch failed, trying again"
+    }
   }
 }
 
@@ -310,7 +325,9 @@ struct RoomMenu: Equatable, Sendable {
     switch state {
     case .checking: return "Checking"
     case .down: return "Room service isn't running"
-    case .unavailable(let why), .failed(let why): return why
+    case .unavailable(let why): return why
+    case .reconnecting: return "Reconnecting to the room service"
+    case .failed(let failure): return failure.sentence
     case .live(let room):
       if let paused = room.paused { return pausedLine(paused, now: now, zone: zone) }
       if room.desk?.atDesk == true { return "Automations on · at the desk" }

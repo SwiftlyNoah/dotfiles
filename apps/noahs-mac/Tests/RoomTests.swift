@@ -304,6 +304,14 @@ final class Tester {
       equal(items(menu(.down, page: false)).first { $0.action == .openPage }?.enabled, false)
     }
 
+    await test("reconnecting: no old data passed off as live") {
+      let m = menu(.reconnecting)
+      equal(m.header, "Room")
+      equal(infos(m), ["Reconnecting to the room service"])
+      expect(items(m).filter { $0.action != .openPage }.allSatisfy { !$0.enabled }, "actions are disabled")
+      equal(RoomIcon.of(.reconnecting, palette: [:]), .plain)
+    }
+
     await test("no noah room yet, and still checking") {
       let m = menu(.unavailable(RoomCLI.notInstalled))
       equal(infos(m), ["noah room isn't installed yet"])
@@ -395,19 +403,22 @@ final class Tester {
 
   func outcomeTests() async {
     func outcome(_ code: Int32, _ out: String = "", _ err: String = "") -> RoomOutcome {
-      RoomCLI.outcome(code: code, stdout: Data(out.utf8), stderr: Data(err.utf8))
+      RoomCLI.outcome(code: code, stdout: Data(out.utf8), stderr: Data(err.utf8), command: "scene")
     }
 
     await test("exit codes: 0 done, 1 failed, 2 usage, 3 refused, 4 down") {
       equal(outcome(0, "{}"), .ok(Data("{}".utf8)))
-      equal(outcome(1, "", "noah: the light service didn't answer\n"), .failed("the light service didn't answer"))
+      // Plain stderr never reaches the menu or an alert: a fixed sentence does, the line goes to the log.
+      equal(outcome(1, "", "noah: the light service didn't answer\n"),
+            .failed("noah room scene failed. The details are in ~/Library/Logs/noahs-mac.log."))
       equal(outcome(1, #"{"error":"the bridge refused","code":"bridge"}"#), .failed("the bridge refused"))
-      equal(outcome(2, "", "usage:\n  noah status [--json]\n"), .usage("noah status [--json]"))
+      equal(outcome(2, "", "usage:\n  noah status [--json]\n"),
+            .usage("noah room scene failed. The details are in ~/Library/Logs/noahs-mac.log."))
       equal(outcome(3, #"{"error":"room.pause is draft","code":"policy"}"#), .refused("room.pause is draft"))
       equal(outcome(4, String(decoding: data("cli/error-room-service-down.json"), as: UTF8.self)), .down)
       equal(outcome(4), .down)
       equal(outcome(1, #"{"error":"the room service isn't running","code":"room_service_down"}"#), .down)
-      equal(outcome(9), .failed("noah room exited with 9"))
+      equal(outcome(9), .failed("noah room scene exited with 9"))
       equal(outcome(1, #"{"error":{"code":"x","message":"nested words"}}"#), .failed("nested words"))
     }
 
@@ -513,9 +524,36 @@ final class Tester {
     await test("the watch is started again when it exits") {
       set("watch-exit", "0")
       let f = feed()
+      var seen: [RoomState] = []
+      f.onChange = { seen.append(f.state) }
       f.start()
       expect(await until { calls.filter { $0.hasPrefix("room watch") }.count >= 3 }, "restarted: \(calls)")
-      expect(f.state.now != nil, "still live")
+      // Between a watch's exit and the next status, the menu doesn't pass old data off as live.
+      expect(seen.contains(.reconnecting), "reconnecting shown: \(seen.map(Self.name))")
+      expect(seen.contains { $0.now != nil }, "live again")
+      f.stop()
+    }
+
+    await test("status works but watch exits 2: watch failed, not a missing CLI") {
+      set("watch-exit", "2")
+      let f = feed()
+      f.start()
+      expect(await until { f.state == .failed(.watch) }, "watch failed: \(f.state)")
+      try? await Task.sleep(for: .milliseconds(400))
+      expect(f.state != .unavailable(RoomCLI.notInstalled), "never not installed")
+      equal(infos(menu(f.state)), ["noah room watch failed, trying again"])
+      f.stop()
+    }
+
+    await test("status failing on stderr shows a fixed sentence, not the stderr") {
+      set("state", "failed")
+      let f = feed()
+      f.start()
+      expect(await until { f.state == .failed(.status) }, "status failed: \(f.state)")
+      let m = menu(f.state)
+      equal(infos(m), ["noah room status failed, trying again"])
+      expect(!words(m).contains { $0.contains("light service") }, "no stderr in the menu")
+      expect(items(m).filter { $0.action != .openPage }.allSatisfy { !$0.enabled }, "actions are disabled")
       f.stop()
     }
 
@@ -575,7 +613,7 @@ final class Tester {
       set("state", "refused")
       equal(await f.perform(.scene("focus")), ["noah-os's policy said no: room.scene is not auto in the policy"])
       set("state", "failed")
-      equal(await f.perform(.leaving), ["the light service didn't answer in 10 s"])
+      equal(await f.perform(.leaving), ["noah room leaving failed. The details are in ~/Library/Logs/noahs-mac.log."])
       set("state", "down")
       equal(await f.perform(.bed), ["The room service isn't running, so nothing changed."])
       equal(f.state, .down)
@@ -621,6 +659,13 @@ final class Tester {
       equal(app.terminationStatus, SIGTERM)
       expect(await until(3) { !alive(pid) }, "the watch child \(pid) is gone")
       if alive(pid) { kill(pid, SIGKILL) }
+    }
+  }
+
+  static func name(_ s: RoomState) -> String {
+    switch s {
+    case .live: "live"
+    default: "\(s)"
     }
   }
 
