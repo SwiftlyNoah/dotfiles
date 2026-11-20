@@ -135,8 +135,10 @@ enum Room {
     "lights_out": "Lights out", "wake_ramp": "Wake ramp", "wake": "Wake",
   ]
 
-  /// Lilac Moon's gold (palette.json), the amber the moon fills with during wind down.
+  /// Lilac Moon's gold and base (palette.json): during wind down the moon is a base-colored
+  /// crescent on a gold disk.
   static let amber = "#f6c177"
+  static let night = "#1f1d30"
 
   // MARK: Times
 

@@ -82,33 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     guard key != iconKey else { return }
     iconKey = key
     let image: NSImage?
-    switch (airDrop, moon) {
-    case (true, _):
+    if airDrop {
       image = NSImage(systemSymbolName: "dot.radiowaves.left.and.right", accessibilityDescription: "Noah's Mac, AirDrop on")
       image?.isTemplate = true
-    case (false, .plain):
-      image = NSImage(systemSymbolName: "moon.fill", accessibilityDescription: "Noah's Mac")
-      image?.isTemplate = true
-    case (false, .tinted(let hex)):
-      image = Self.symbol("moon.fill", hex, "Noah's Mac")
-    case (false, .windDown):
-      image = Self.symbol("moon.circle.fill", Room.amber, "Noah's Mac, wind down")
+    } else {
+      image = RoomMenuItems.moon(moon)
     }
     statusItem.button?.image = image
-  }
-
-  private static func symbol(_ name: String, _ hex: String, _ description: String) -> NSImage? {
-    let config = NSImage.SymbolConfiguration(paletteColors: [color(hex)])
-    let image = NSImage(systemSymbolName: name, accessibilityDescription: description)?.withSymbolConfiguration(config)
-    image?.isTemplate = false
-    return image
-  }
-
-  private static func color(_ hex: String) -> NSColor {
-    let value = UInt32(hex.dropFirst(), radix: 16) ?? 0xFFFFFF
-    return NSColor(
-      srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
-      blue: CGFloat(value & 0xFF) / 255, alpha: 1)
   }
 
   // MARK: The menu, rebuilt each time it opens
@@ -194,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func makeRoomItems() -> [NSMenuItem] {
     let model = RoomMenu.build(room.state, now: .now, pageAvailable: roomPage != nil)
     roomModel = model
-    return [.sectionHeader(title: model.header)] + model.entries.map(roomItem)
+    return RoomMenuItems.make(model, dots: roomScenes?.dots, target: self, selector: #selector(roomAction(_:)))
   }
 
   /// Rebuilds the Room items in place while the menu is open, when what they say changed.
@@ -206,60 +186,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     roomItems.forEach(menu.removeItem)
     roomItems = makeRoomItems()
     for (offset, item) in roomItems.enumerated() { menu.insertItem(item, at: start + offset) }
-  }
-
-  private func roomItem(_ entry: RoomEntry) -> NSMenuItem {
-    switch entry {
-    case .info(let text):
-      return info(text)
-    case .separator:
-      return .separator()
-    case .submenu(let title, let entries):
-      let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-      let sub = NSMenu()
-      sub.autoenablesItems = false
-      entries.map(roomItem).forEach(sub.addItem)
-      item.submenu = sub
-      return item
-    case .item(let entry):
-      let item = action(entry.title, #selector(roomAction(_:)))
-      item.representedObject = RoomActionBox(entry.action)
-      item.subtitle = entry.subtitle
-      item.isEnabled = entry.enabled
-      item.state = entry.checked ? .on : .off
-      if let hotkey = entry.hotkey {
-        item.keyEquivalent = hotkey.letter
-        item.keyEquivalentModifierMask = [.control, .option]
-      }
-      if let key = entry.dot, let colors = roomScenes?.dots[key] {
-        item.image = Self.dot(colors)
-      }
-      return item
-    }
-  }
-
-  /// A scene's dot: its bars' color (left and right halves when they differ), or an empty ring
-  /// for a scene that turns everything off.
-  private static func dot(_ hexes: [String]) -> NSImage {
-    let size = NSSize(width: 14, height: 14)
-    let colors = hexes.map(color)
-    return NSImage(size: size, flipped: false) { rect in
-      let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 1.5, dy: 1.5))
-      if colors.isEmpty {
-        NSColor.secondaryLabelColor.setStroke()
-        circle.lineWidth = 1
-        circle.stroke()
-        return true
-      }
-      circle.addClip()
-      colors[0].setFill()
-      rect.fill()
-      if colors.count > 1 {
-        colors[1].setFill()
-        NSRect(x: rect.midX, y: rect.minY, width: rect.width / 2, height: rect.height).fill()
-      }
-      return true
-    }
   }
 
   /// The scenes' colors, read once from `noah room export --public` (tried again every 10
@@ -274,8 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func roomAction(_ sender: NSMenuItem) {
-    guard let box = sender.representedObject as? RoomActionBox else { return }
-    run(box.action)
+    if let action = RoomMenuItems.action(of: sender) { run(action) }
   }
 
   fileprivate func run(_ action: RoomAction) {
@@ -344,10 +269,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     alert.informativeText = problems.joined(separator: "\n")
     alert.runModal()
   }
-}
-
-/// Carries a RoomAction on an NSMenuItem.
-private final class RoomActionBox: NSObject {
-  let action: RoomAction
-  init(_ action: RoomAction) { self.action = action }
 }
