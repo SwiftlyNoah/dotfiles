@@ -168,6 +168,17 @@ in
       warnEcho "Menu bar icons not hidden: this terminal has no Full Disk Access. Run ./rebuild.sh again once it has."
   '';
 
+  # Maccy's history on ⌃⌘V (key code 9, ⌃⌘ = 4096 + 256). Its default, ⌘⇧C, is Hammerspoon's
+  # Claude key, and macOS keeps ⌘⇧Space for the Screenshot app's visual intelligence. It still
+  # skips copies that apps mark as passwords. Maccy keeps its settings in its sandbox container,
+  # which macOS lets only a terminal with Full Disk Access write; a switch from the admin helper
+  # can't, so a refusal is a warning (the settings stay as last written).
+  home.activation.maccy = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    { run /usr/bin/defaults write org.p0deje.Maccy KeyboardShortcuts_popup -string '{"carbonKeyCode":9,"carbonModifiers":4352}' &&
+      run /usr/bin/defaults write org.p0deje.Maccy showInStatusBar -bool true; } ||
+      warnEcho "Maccy's settings not written: no access to its container from here. Run ./rebuild.sh in a terminal with Full Disk Access to apply them."
+  '';
+
   # The menu bar, left to right: a Time Machine backup's progress while one runs (Hammerspoon),
   # Cisco Secure Client (the VPN), Maccy, Amphetamine, Noah's Mac, Tailscale, Noah's Pool,
   # Now Playing, Wi-Fi, Battery, Control Center, Clock, and no Spotlight (Search) icon. macOS 27 keeps the order here,

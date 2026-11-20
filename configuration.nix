@@ -1,5 +1,6 @@
 {
   lib,
+  pkgs,
   user,
   xcode,
   localConfig,
@@ -134,13 +135,8 @@
           TALLogoutSavesState = false;
           LoginwindowLaunchesRelaunchApps = false;
         };
-        # Maccy's history on ⌃⌘V (key code 9, ⌃⌘ = 4096 + 256). Its default, ⌘⇧C, is
-        # Hammerspoon's Claude key, and macOS keeps ⌘⇧Space for the Screenshot app's visual
-        # intelligence. It still skips copies that apps mark as passwords.
-        "org.p0deje.Maccy" = {
-          KeyboardShortcuts_popup = ''{"carbonKeyCode":9,"carbonModifiers":4352}'';
-          showInStatusBar = true;
-        };
+        # Maccy's settings are in home.nix (home.activation.maccy): they live in its sandbox
+        # container, which a switch from the admin helper may not write.
 
         # The menu bar's order is in home.nix (home.activation.menuBarOrder). Siri,
         # Bluetooth, Focus, Time Machine, AltTab and Hammerspoon stay out of it: all are
@@ -227,6 +223,115 @@
     serviceConfig = {
       RunAtLoad = true;
       KeepAlive = true;
+    };
+  };
+
+  # The Hue Bridge sits alone on a private cable to the Studio's built-in Ethernet port (en0):
+  # the Mac is 192.168.77.1, the bridge 192.168.77.10. This job owns that link. It does
+  # nothing on a Mac whose en0 is not wired Ethernet (the MacBook's en0 is Wi-Fi), so it can
+  # never hand out addresses on someone else's network.
+  # - DHCP: macOS's bootpd (enabled by hand on the Studio) gives the bridge its reserved
+  #   address with the Mac as router and DNS. With no gateway the bridge's main program
+  #   restarted about every 40 seconds for days (fixed 2026-11-20 by giving it one).
+  # - A way out for the bridge and only the bridge: IPv4 forwarding and a NAT rule for its one
+  #   address in pf's com.apple anchor (which /etc/pf.conf already loads), so it can set its
+  #   clock and update its 2020 firmware. Nobody on another network can route through the Mac
+  #   to the bridge link or the tailnet, and the bridge can't reach the tailnet.
+  # - DNS: dnsmasq on the link address only.
+  # Logs: /var/log/hue-bridge-dns.log (the bridge's lookups) and /var/log/hue-bridge-nat.log
+  # (pf's state and the bridge's connections every minute), each cut at 2 MB.
+  # The bridge's hardware address lives in local/config.json (`hueBridge.mac`), not in this
+  # public repo; a Mac whose local config names no bridge gets no job at all.
+  launchd.daemons.hue-bridge-nat = lib.mkIf (localConfig ? hueBridge) {
+    script = ''
+      if ! /usr/sbin/networksetup -listallhardwareports | /usr/bin/grep -A1 -x 'Hardware Port: Ethernet' | /usr/bin/grep -qx 'Device: en0'; then
+        echo "en0 is not a wired Ethernet port on this Mac: no bridge link here, nothing to do" >&2
+        exec /bin/sleep 3600
+      fi
+      # Wait for the link's own address: at boot en0 has none yet, and dnsmasq on macOS exits
+      # when its listen address is missing (bind-dynamic is Linux only).
+      until /sbin/ifconfig en0 2>/dev/null | /usr/bin/grep -q '^[[:space:]]*inet 192\.168\.77\.1 netmask 0xffffff00 '; do /bin/sleep 10; done
+      if [ -f /etc/bootpd.plist ] && [ ! -f /etc/bootpd.plist.before-hue ]; then /bin/cp -p /etc/bootpd.plist /etc/bootpd.plist.before-hue; fi
+      /bin/cat > /etc/bootpd.plist <<'PLIST'
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+        <key>bootp_enabled</key><false/>
+        <key>detect_other_dhcp_server</key><array><string>en0</string></array>
+        <key>dhcp_enabled</key><array><string>en0</string></array>
+        <key>reply_threshold_seconds</key><integer>0</integer>
+        <key>Subnets</key>
+        <array>
+          <dict>
+            <key>name</key><string>hue-bridge</string>
+            <key>net_address</key><string>192.168.77.0</string>
+            <key>net_mask</key><string>255.255.255.0</string>
+            <key>net_range</key><array><string>192.168.77.10</string><string>192.168.77.50</string></array>
+            <key>allocate</key><false/>
+            <key>use_server_config</key><false/>
+            <key>lease_min</key><integer>86400</integer>
+            <key>lease_max</key><integer>86400</integer>
+            <key>dhcp_router</key><string>192.168.77.1</string>
+            <key>dhcp_domain_name_server</key><array><string>192.168.77.1</string></array>
+          </dict>
+        </array>
+      </dict>
+      </plist>
+      PLIST
+      /bin/cat > /etc/bootptab <<'TAB'
+      %%
+      # hostname   hwtype  hwaddr             ipaddr
+      hue-bridge   1       ${localConfig.hueBridge.mac or ""}  192.168.77.10
+      TAB
+      /bin/launchctl kickstart -k system/com.apple.bootpd || true
+      # Forwarding goes on only once pf is enabled with these blocks loaded: with forwarding on,
+      # macOS stops checking which interface a packet for one of its addresses came in on.
+      /sbin/pfctl -a com.apple/hue-bridge -f - <<'RULES' || { echo "pf rules not loaded: forwarding stays off" >&2; /usr/sbin/sysctl -w net.inet.ip.forwarding=0; exit 1; }
+      nat on en10 inet from 192.168.77.10 to any -> (en10)
+      nat on en1 inet from 192.168.77.10 to any -> (en1)
+      block in quick on { en1 en10 } inet from any to 192.168.77.0/24
+      block in quick on { en1 en10 } inet from any to 100.64.0.0/10
+      block in quick on en0 inet from 192.168.77.0/24 to 100.64.0.0/10
+      RULES
+      /sbin/pfctl -E >/dev/null 2>&1 || true
+      if ! /sbin/pfctl -s info 2>/dev/null | /usr/bin/grep -q '^Status: Enabled'; then
+        echo "pf is not enabled: forwarding stays off" >&2; /usr/sbin/sysctl -w net.inet.ip.forwarding=0; exit 1
+      fi
+      /usr/sbin/sysctl -w net.inet.ip.forwarding=1
+      log=/var/log/hue-bridge-nat.log
+      { /bin/date -u +%Y-%m-%dT%H:%M:%SZ; echo "started"; /sbin/pfctl -s info 2>&1 | /usr/bin/head -n 2
+        /sbin/pfctl -a com.apple/hue-bridge -s nat 2>&1; /sbin/pfctl -a com.apple/hue-bridge -s rules 2>&1; } >> "$log"
+      (
+        while :; do
+          # If pf or the blocks go away (a reload of /etc/pf.conf, pfctl -d), forwarding goes off
+          # and the whole job restarts ($$ is dnsmasq after the exec) to set everything up again.
+          if ! /sbin/pfctl -s info 2>/dev/null | /usr/bin/grep -q '^Status: Enabled' ||
+             ! /sbin/pfctl -a com.apple/hue-bridge -s rules 2>/dev/null | /usr/bin/grep -q .; then
+            /usr/sbin/sysctl -w net.inet.ip.forwarding=0 >/dev/null
+            echo "$(/bin/date -u +%FT%TZ) pf or its hue-bridge anchor is gone: forwarding off, restarting" >> "$log"
+            kill $$
+          fi
+          { /bin/date -u +%Y-%m-%dT%H:%M:%SZ
+            states=$(/sbin/pfctl -s state 2>/dev/null | /usr/bin/grep -F '192.168.77.10:')
+            echo "bridge states: $(printf '%s' "$states" | /usr/bin/grep -c .)"
+            printf '%s\n' "$states" | /usr/bin/head -n 8; } >> "$log" 2>&1
+          for f in "$log" /var/log/hue-bridge-dns.log; do
+            if [ -f "$f" ] && [ "$(/usr/bin/stat -f %z "$f")" -gt 2000000 ]; then /bin/cp "$f" "$f.1"; : > "$f"; fi
+          done
+          /bin/sleep 60
+        done
+      ) &
+      /usr/libexec/ApplicationFirewall/socketfilterfw --add ${pkgs.dnsmasq}/bin/dnsmasq >/dev/null
+      /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp ${pkgs.dnsmasq}/bin/dnsmasq >/dev/null
+      exec ${pkgs.dnsmasq}/bin/dnsmasq --keep-in-foreground --user=nobody --no-hosts \
+        --listen-address=192.168.77.1 --bind-dynamic --except-interface=lo0 \
+        --resolv-file=/etc/resolv.conf --cache-size=200 --log-queries --log-facility=-
+    '';
+    serviceConfig = {
+      RunAtLoad = true;
+      KeepAlive = true;
+      StandardErrorPath = "/var/log/hue-bridge-dns.log";
     };
   };
 
