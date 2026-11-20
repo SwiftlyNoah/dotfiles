@@ -382,6 +382,21 @@ final class Tester {
       equal(RoomIcon.of(.checking, palette: scenes.palette), .plain)
     }
 
+    await test("a pale moon on a light menu bar stays the plain moon") {
+      @MainActor func bars(_ name: String, _ xy: [Double]) -> RoomNow {
+        room("cli/status.json") { o in
+          o["lights"] = [["key": "bar-left", "on": true, "reachable": true, "colormode": "xy", "xy": xy, "color_name": name]]
+        }
+      }
+      let cool = bars("cool white", [0.3324, 0.3474]), warm = bars("warm white", [0.4578, 0.4101])
+      let lilac = bars("lilac", [0.2875, 0.2024])
+      equal(RoomIcon.of(.live(cool), palette: scenes.palette, lightMenuBar: true), .plain)
+      equal(RoomIcon.of(.live(warm), palette: scenes.palette, lightMenuBar: true), .plain)
+      equal(RoomIcon.of(.live(lilac), palette: scenes.palette, lightMenuBar: true), .tinted("#c4a7e7"))
+      equal(RoomIcon.of(.live(cool), palette: scenes.palette, lightMenuBar: false), .tinted("#f2f1ff"))
+      expect(Color.luminance("#ffffff") > 0.99 && Color.luminance("#000000") < 0.01, "luminance ends")
+    }
+
     await test("a bar in color temperature mode shows that warmth") {
       let ct = room("cli/status.json") { o in
         o["lights"] = [["key": "bar-left", "on": true, "reachable": true, "colormode": "ct", "ct": 370, "kelvin": 2700, "color_name": NSNull()]]

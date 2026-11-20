@@ -370,12 +370,16 @@ enum RoomIcon: Equatable, Sendable {
   case tinted(String) // "#rrggbb"
   case windDown
 
-  static func of(_ state: RoomState, palette: [String: String]) -> RoomIcon {
+  /// `lightMenuBar`: the menu bar is light, where a pale moon (cool white, warm white, gold, foam)
+  /// would vanish, so those stay the plain template moon.
+  static func of(_ state: RoomState, palette: [String: String], lightMenuBar: Bool = false) -> RoomIcon {
     guard let room = state.now else { return .plain }
     if room.mode?.current == "wind_down" { return .windDown }
     let bars = ["bar-left", "bar-right"].compactMap { key in room.lights?.first { $0.key == key } }
     for bar in bars where bar.on == true && bar.reachable != false {
-      if let hex = Color.hex(of: bar, palette: palette) { return .tinted(hex) }
+      if let hex = Color.hex(of: bar, palette: palette) {
+        return lightMenuBar && Color.luminance(hex) > 0.5 ? .plain : .tinted(hex)
+      }
     }
     return .plain
   }
@@ -392,6 +396,16 @@ enum Color {
     }
     if let xy = light.xy, xy.count == 2 { return self.xy(xy[0], xy[1]) }
     return nil
+  }
+
+  /// Relative luminance (WCAG) of "#rrggbb", 0 for black to 1 for white.
+  static func luminance(_ hex: String) -> Double {
+    let value = Int(hex.dropFirst(), radix: 16) ?? 0
+    let channels = [(value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF].map { c -> Double in
+      let v = Double(c) / 255
+      return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
   }
 
   /// CIE xy at full brightness to sRGB (Philips' wide gamut conversion).

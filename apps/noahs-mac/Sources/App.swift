@@ -75,10 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   /// The moon, unless AirDrop is on (radio waves). The moon takes the bars' color while they're
-  /// on and fills with amber during wind down.
+  /// on and fills with amber during wind down. The 3 s timer also catches the menu bar turning
+  /// light or dark.
   private func updateIcon() {
     let airDrop = AirDrop.isUp
-    let moon = RoomIcon.of(room.state, palette: roomScenes?.palette ?? [:])
+    let lightBar = statusItem.button?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+    let moon = RoomIcon.of(room.state, palette: roomScenes?.palette ?? [:], lightMenuBar: lightBar)
     let key = airDrop ? "airdrop" : "\(moon)"
     guard key != iconKey else { return }
     iconKey = key
