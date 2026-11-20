@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       refreshRoomItems()
     }
     room.start()
+    Termination.onSignal { AppDelegate.shared?.room.stop() }
     for (key, hotkey) in RoomMenu.hotkeys {
       Hotkeys.register(hotkey) { AppDelegate.shared?.run(.scene(key)) }
     }

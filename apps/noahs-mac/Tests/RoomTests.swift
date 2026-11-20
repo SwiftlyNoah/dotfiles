@@ -7,11 +7,25 @@ import Foundation
 @MainActor
 struct RoomTests {
   static func main() async {
+    if ProcessInfo.processInfo.environment["ROOM_HARNESS"] == "1" { await harness() }
     let t = Tester()
     await t.all()
     t.finish()
   }
 }
+
+/// The test binary run again as a stand-in for the app: a live feed with a watch child, the
+/// app's signal handling, and nothing else, until a signal ends it.
+@MainActor
+func harness() async -> Never {
+  let env = ProcessInfo.processInfo.environment
+  let feed = RoomFeed(cli: RoomCLI(noah: URL(fileURLWithPath: env["FAKE_NOAH"]!), timeout: 10), backoff: [0.05])
+  feed.start()
+  Termination.onSignal { feed.stop() }
+  while true { try? await Task.sleep(for: .seconds(60)) }
+}
+
+func alive(_ pid: Int32) -> Bool { kill(pid, 0) == 0 }
 
 @MainActor
 final class Tester {
@@ -81,6 +95,11 @@ final class Tester {
   }
 
   var cli: RoomCLI { RoomCLI(noah: fakeNoah, timeout: 10) }
+
+  var watchPid: Int32? {
+    (try? String(contentsOf: control.appending(path: "watch-pid"), encoding: .utf8))
+      .flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+  }
 
   func until(_ seconds: Double = 5, _ condition: () -> Bool) async -> Bool {
     let end = Date().addingTimeInterval(seconds)
@@ -573,12 +592,28 @@ final class Tester {
       set("watch-hold", "30")
       let f = feed()
       f.start()
-      expect(await until { calls.contains("room watch --client menubar") }, "watching")
+      expect(await until { watchPid != nil }, "watching")
+      guard let pid = watchPid else { return }
+      expect(alive(pid), "the watch child runs")
       f.stop()
-      try? await Task.sleep(for: .milliseconds(300))
-      let watches = calls.filter { $0.hasPrefix("room watch") }.count
-      try? await Task.sleep(for: .milliseconds(300))
-      equal(calls.filter { $0.hasPrefix("room watch") }.count, watches)
+      expect(await until(3) { !alive(pid) }, "the watch child \(pid) is gone")
+    }
+
+    await test("a SIGTERM to the app ends its watch child too") {
+      set("watch-hold", "30")
+      let app = Process()
+      app.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+      app.environment = ProcessInfo.processInfo.environment.merging(["ROOM_HARNESS": "1"]) { $1 }
+      try app.run()
+      expect(await until { watchPid != nil }, "watching")
+      guard let pid = watchPid else { return app.terminate() }
+      expect(alive(pid), "the watch child runs")
+      kill(app.processIdentifier, SIGTERM)
+      expect(await until(3) { !app.isRunning }, "the app exits")
+      equal(app.terminationReason, .uncaughtSignal)
+      equal(app.terminationStatus, SIGTERM)
+      expect(await until(3) { !alive(pid) }, "the watch child \(pid) is gone")
+      if alive(pid) { kill(pid, SIGKILL) }
     }
   }
 

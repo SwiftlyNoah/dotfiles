@@ -353,6 +353,29 @@ final class RoomFeed {
   }
 }
 
+/// On SIGTERM, SIGINT or SIGHUP: runs `stop`, then dies of the same signal, so launchd sees the
+/// exit it would have seen anyway. AppKit doesn't call applicationWillTerminate for a signal
+/// (launchctl kickstart -k from build.sh, a logout), and Process starts the watch child in its own
+/// process group, so without this the child would outlive the app.
+@MainActor
+enum Termination {
+  private static var sources: [DispatchSourceSignal] = []
+
+  static func onSignal(_ stop: @escaping @MainActor () -> Void) {
+    for number in [SIGTERM, SIGINT, SIGHUP] {
+      signal(number, SIG_IGN)
+      let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+      source.setEventHandler {
+        MainActor.assumeIsolated { stop() }
+        signal(number, SIG_DFL)
+        raise(number)
+      }
+      source.resume()
+      sources.append(source)
+    }
+  }
+}
+
 /// A line in the app's log (~/Library/Logs/noahs-mac.log), unbuffered. Never the room's
 /// contents: they carry presence and sleep times.
 func logLine(_ line: String) {

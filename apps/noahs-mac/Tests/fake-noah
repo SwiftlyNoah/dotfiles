@@ -8,6 +8,7 @@
 #   watch       fixture paths, one per line, that `noah room watch` prints as one line each
 #   watch-exit  watch's exit code once it has printed them (default 0)
 #   watch-hold  seconds watch stays up after printing (default 0)
+#   watch-pid   written by the fake: the pid of a watch that exits 0, which stays up as `sleep`
 #   export      the file `noah room export --public` prints
 #   calls       each call's arguments are appended here, one line per call
 set -eu
@@ -49,8 +50,15 @@ case $command in
     setting watch "" | while IFS= read -r file || [ -n "$file" ]; do
       [ -n "$file" ] && tr -d '\n' < "$file" && echo
     done
-    sleep "$(setting watch-hold 0)"
-    exit "$(setting watch-exit 0)"
+    hold=$(setting watch-hold 0)
+    code=$(setting watch-exit 0)
+    if [ "$code" = 0 ]; then
+      # The sleep takes this shell's pid, so a test can check the watch child itself is gone.
+      echo $$ > "$dir/watch-pid"
+      exec sleep "$hold"
+    fi
+    sleep "$hold"
+    exit "$code"
     ;;
   scene)
     case $state in
