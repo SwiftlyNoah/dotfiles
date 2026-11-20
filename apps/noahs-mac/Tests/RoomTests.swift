@@ -318,6 +318,13 @@ final class Tester {
         let all = words(menu(.live(room(path))))
         expect(!all.contains { $0.localizedCaseInsensitiveContains("halo") }, "\(path) shows the Halo")
       }
+      let notice = room("cli/status.json") { o in
+        o["notices"] = [["key": "halo_service_down", "text": "The Halo service isn't answering", "data_classes": []],
+                        ["key": "battery_low", "text": "The motion sensor's battery is at 12%", "data_classes": []]]
+      }
+      let shown = words(menu(.live(notice)))
+      expect(!shown.contains { $0.localizedCaseInsensitiveContains("halo") }, "the Halo notice shows: \(shown)")
+      expect(shown.contains("The motion sensor's battery is at 12%"), "other notices still show")
       for state in [RoomState.down, .checking, .unavailable(RoomCLI.notInstalled)] {
         expect(!words(menu(state)).contains { $0.localizedCaseInsensitiveContains("halo") }, "\(state) shows the Halo")
       }

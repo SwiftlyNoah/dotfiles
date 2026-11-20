@@ -61,6 +61,11 @@ struct RoomNow: Decodable, Equatable, Sendable {
   struct Notice: Decodable, Equatable, Sendable {
     var key: String?
     var text: String?
+
+    /// `halo_service_down` and any other notice about the Halo, which the menu never shows.
+    var aboutHalo: Bool {
+      (key ?? "").localizedCaseInsensitiveContains("halo") || (text ?? "").localizedCaseInsensitiveContains("halo")
+    }
   }
 
   static func decode(_ data: Data) -> RoomNow? {
@@ -252,8 +257,8 @@ struct RoomMenu: Equatable, Sendable {
     var entries: [RoomEntry] = []
 
     entries.append(.info(stateLine(state, now: now, zone: zone)))
-    for text in (room?.notices ?? []).compactMap(\.text) where !text.isEmpty {
-      entries.append(.info(text))
+    for notice in room?.notices ?? [] where !notice.aboutHalo {
+      if let text = notice.text, !text.isEmpty { entries.append(.info(text)) }
     }
 
     let current = room?.scene?.last
