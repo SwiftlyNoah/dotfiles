@@ -194,6 +194,15 @@ enum RoomState: Equatable, Sendable {
     if case .live(let now) = self { return now }
     return nil
   }
+
+  /// Whether `noah room` exists here (it answered, even if only to say the service is down), so
+  /// the hotkeys and the scene colors are worth having.
+  var cliExists: Bool {
+    switch self {
+    case .checking, .unavailable: false
+    case .live, .down, .reconnecting, .failed: true
+    }
+  }
 }
 
 enum RoomFailure: Equatable, Sendable {

@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let room = RoomFeed(cli: RoomCLI(noah: RoomCLI.defaultNoah))
   private var roomScenes: RoomScenes?
   private var scenesTriedAt: Date?
+  private var hotkeysRegistered = false
   private var roomModel: RoomMenu?
   private var roomItems: [NSMenuItem] = []
   private var iconKey = ""
@@ -47,15 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     room.onChange = { [weak self] in
       guard let self else { return }
-      if room.state.now != nil || room.state == .down { loadScenes() }
+      if roomScenes == nil { loadScenes() }
+      registerHotkeys()
       updateIcon()
       refreshRoomItems()
     }
     room.start()
     Termination.onSignal { AppDelegate.shared?.room.stop() }
-    for (key, hotkey) in RoomMenu.hotkeys {
-      Hotkeys.register(hotkey) { AppDelegate.shared?.run(.scene(key)) }
-    }
 
     // The icon follows AirDrop's real state, which can change without this app (the guard
     // job closing a window when it ends).
@@ -99,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func menuWillOpen(_ menu: NSMenu) {
     portal.refresh()
     room.poke()
+    loadScenes()
   }
 
   func menuNeedsUpdate(_ menu: NSMenu) {
@@ -191,15 +191,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     for (offset, item) in roomItems.enumerated() { menu.insertItem(item, at: start + offset) }
   }
 
-  /// The scenes' colors, read once from `noah room export --public` (tried again every 10
-  /// minutes until it answers).
+  /// The scenes' colors from `noah room export --public`: when the room first answers, and again
+  /// when the menu opens (at most every 5 minutes), so a room.yaml change shows up without a
+  /// restart.
   private func loadScenes() {
-    guard roomScenes == nil, scenesTriedAt.map({ Date.now.timeIntervalSince($0) > 600 }) ?? true else { return }
+    guard room.state.cliExists, scenesTriedAt.map({ Date.now.timeIntervalSince($0) > 300 }) ?? true else { return }
     scenesTriedAt = .now
     Task {
-      if case .ok(let data) = await room.cli.export() { roomScenes = RoomScenes.decode(data) }
+      if case .ok(let data) = await room.cli.export(), let scenes = RoomScenes.decode(data) { roomScenes = scenes }
       updateIcon()
     }
+  }
+
+  /// ⌃⌥F and ⌃⌥W are taken from every other app only once `noah room` exists on this Mac.
+  private func registerHotkeys() {
+    guard !hotkeysRegistered, room.state.cliExists else { return }
+    hotkeysRegistered = true
+    for (key, hotkey) in RoomMenu.hotkeys {
+      Hotkeys.register(hotkey) { AppDelegate.shared?.hotkey(.scene(key)) }
+    }
+  }
+
+  /// A hotkey runs its scene; with no `noah room` to run it, it does nothing, without an alert.
+  fileprivate func hotkey(_ action: RoomAction) {
+    if room.state.cliExists { run(action) }
   }
 
   @objc private func roomAction(_ sender: NSMenuItem) {

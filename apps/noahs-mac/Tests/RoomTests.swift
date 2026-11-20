@@ -312,6 +312,12 @@ final class Tester {
       equal(RoomIcon.of(.reconnecting, palette: [:]), .plain)
     }
 
+    await test("the hotkeys and scene colors wait for noah room to exist") {
+      expect(!RoomState.checking.cliExists && !RoomState.unavailable(RoomCLI.notInstalled).cliExists, "no CLI yet")
+      expect(RoomState.down.cliExists && RoomState.reconnecting.cliExists && RoomState.failed(.watch).cliExists, "CLI there")
+      expect(RoomState.live(room("cli/status.json")).cliExists, "live")
+    }
+
     await test("no noah room yet, and still checking") {
       let m = menu(.unavailable(RoomCLI.notInstalled))
       equal(infos(m), ["noah room isn't installed yet"])
