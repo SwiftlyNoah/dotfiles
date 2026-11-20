@@ -53,14 +53,14 @@ struct RoomNow: Decodable, Equatable, Sendable {
     var events: [Event]?
     struct Event: Decodable, Equatable, Sendable {
       var kind: String
-      var at: String
+      var at: String?
       var state: String?
     }
   }
 
   struct Notice: Decodable, Equatable, Sendable {
     var key: String?
-    var text: String
+    var text: String?
   }
 
   static func decode(_ data: Data) -> RoomNow? {
@@ -252,8 +252,8 @@ struct RoomMenu: Equatable, Sendable {
     var entries: [RoomEntry] = []
 
     entries.append(.info(stateLine(state, now: now, zone: zone)))
-    for notice in room?.notices ?? [] where !notice.text.isEmpty {
-      entries.append(.info(notice.text))
+    for text in (room?.notices ?? []).compactMap(\.text) where !text.isEmpty {
+      entries.append(.info(text))
     }
 
     let current = room?.scene?.last
@@ -331,7 +331,7 @@ struct RoomMenu: Equatable, Sendable {
   /// is on the state line already, and a wake ramp that won't run isn't next.
   static func nextLine(_ room: RoomNow, now: Date, zone: TimeZone) -> String? {
     let upcoming = (room.next?.events ?? []).compactMap { e -> (String, Date)? in
-      guard let label = Room.nextLabels[e.kind], let at = Room.date(e.at), at > now else { return nil }
+      guard let label = Room.nextLabels[e.kind], let at = e.at.flatMap(Room.date), at > now else { return nil }
       if e.kind == "wake_ramp", let state = e.state, state != "planned" { return nil }
       return (label, at)
     }

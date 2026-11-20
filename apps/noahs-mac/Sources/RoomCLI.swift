@@ -248,6 +248,7 @@ final class RoomFeed {
     let outcome = await cli.run(command)
     let report = RoomReport.of(action, outcome, room: state.now)
     if case .down = outcome, state.now != nil { set(.down) }
+    if case .ok = outcome, state.now == nil { poke() }
     if let paused = report.paused, var room = state.now {
       room.paused = paused.value
       set(.live(room))
@@ -258,7 +259,9 @@ final class RoomFeed {
   private func loop() async {
     var misses = 0
     while !stopped {
-      switch await cli.run(["status"]) {
+      let status = await cli.run(["status"])
+      if stopped { return }
+      switch status {
       case .ok(let data):
         if let room = RoomNow.decode(data) {
           latestVersion = room.version
@@ -316,7 +319,7 @@ final class RoomFeed {
     guard new != state else { return }
     let was = state
     state = new
-    if Self.kind(was) != Self.kind(new) { print("room: \(Self.kind(new))") }
+    if Self.kind(was) != Self.kind(new) { logLine("room: \(Self.kind(new))") }
     onChange?()
   }
 
@@ -348,6 +351,12 @@ final class RoomFeed {
     wake?.resume()
     wake = nil
   }
+}
+
+/// A line in the app's log (~/Library/Logs/noahs-mac.log), unbuffered. Never the room's
+/// contents: they carry presence and sleep times.
+func logLine(_ line: String) {
+  FileHandle.standardError.write(Data((line + "\n").utf8))
 }
 
 /// What a finished action means for the menu: problems to show, and the new pause when it

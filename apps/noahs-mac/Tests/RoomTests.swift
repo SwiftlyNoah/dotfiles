@@ -534,6 +534,18 @@ final class Tester {
       f.stop()
     }
 
+    await test("an action that works while the menu shows the service down asks again at once") {
+      set("state", "down")
+      let f = RoomFeed(cli: cli, backoff: [30], settled: 60)
+      f.start()
+      expect(await until { f.state == .down }, "down")
+      set("state", "live")
+      set("watch-hold", "5")
+      equal(await f.perform(.scene("focus")), [])
+      expect(await until(2) { f.state.now != nil }, "live without waiting out the 30 s")
+      f.stop()
+    }
+
     await test("stopping ends the watch child") {
       set("watch-hold", "30")
       let f = feed()

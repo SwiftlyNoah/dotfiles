@@ -29,7 +29,7 @@ enum Hotkeys {
       UInt32(code), UInt32(controlKey | optionKey), EventHotKeyID(signature: signature, id: id),
       GetApplicationEventTarget(), 0, &ref)
     guard status == noErr, let ref else {
-      print("hotkeys: \(hotkey.glyphs) is taken (\(status))")
+      logLine("hotkeys: \(hotkey.glyphs) is taken (\(status))")
       return false
     }
     refs.append(ref)
