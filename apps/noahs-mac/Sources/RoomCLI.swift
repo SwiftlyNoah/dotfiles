@@ -9,7 +9,8 @@ enum RoomOutcome: Equatable, Sendable {
   case ok(Data)
   case failed(String)
   case usage(String)
-  case refused(String)
+  /// The policy's own words when noah-os printed them as JSON, else nil.
+  case refused(String?)
   case down
   /// noah couldn't be started at all.
   case missing(String)
@@ -52,7 +53,10 @@ struct RoomCLI: Sendable {
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timer)
     let end = await child.finished()
     timer.cancel()
-    if end.killed { return .failed("noah room \(args[1]) didn't answer in \(Int(timeout)) s") }
+    if end.killed {
+      logLine("room: noah room \(args[1]) didn't answer in \(Int(timeout)) s and was stopped")
+      return .failed("noah room \(args[1]) didn't answer in \(Int(timeout)) s")
+    }
     return Self.outcome(code: end.code, stdout: end.stdout, stderr: end.stderr, command: args[1])
   }
 
@@ -71,7 +75,7 @@ struct RoomCLI: Sendable {
     }
     switch code {
     case 2: return .usage(why)
-    case 3: return .refused(why)
+    case 3: return .refused(error?.message)
     default: return .failed(why)
     }
   }
@@ -295,8 +299,12 @@ final class RoomFeed {
       case .down: set(.down)
       case .usage: set(.unavailable(RoomCLI.notInstalled))
       case .missing(let why): set(.unavailable(why))
-      case .refused(let why), .failed(let why):
-        logLine("room: noah room status: \(why)")
+      case .refused:
+        logLine("room: noah room status was refused by the policy")
+        set(.failed(.status))
+      case .failed:
+        // outcome() or once() already logged what noah printed.
+        logLine("room: noah room status failed")
         set(.failed(.status))
       }
       if stopped { return }
@@ -415,7 +423,8 @@ struct RoomReport: Equatable {
     case .down: return RoomReport(problems: ["The room service isn't running, so nothing changed."])
     case .missing(let why): return RoomReport(problems: ["\(why), so nothing changed."])
     case .usage: return RoomReport(problems: ["\(RoomCLI.notInstalled), so nothing changed."])
-    case .refused(let why): return RoomReport(problems: ["noah-os's policy said no: \(why)"])
+    case .refused(let why?): return RoomReport(problems: ["noah-os's policy said no: \(why)"])
+    case .refused(nil): return RoomReport(problems: ["noah-os's policy said no."])
     case .failed(let why): return RoomReport(problems: [why])
     case .ok(let data): return ok(action, data, room: room)
     }

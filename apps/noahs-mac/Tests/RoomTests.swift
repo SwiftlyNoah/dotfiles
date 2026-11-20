@@ -436,6 +436,7 @@ final class Tester {
       equal(outcome(2, "", "usage:\n  noah status [--json]\n"),
             .usage("noah room scene failed. The details are in ~/Library/Logs/noahs-mac.log."))
       equal(outcome(3, #"{"error":"room.pause is draft","code":"policy"}"#), .refused("room.pause is draft"))
+      equal(outcome(3, "", "noah: room.pause is draft in the policy\n"), .refused(nil))
       equal(outcome(4, String(decoding: data("cli/error-room-service-down.json"), as: UTF8.self)), .down)
       equal(outcome(4), .down)
       equal(outcome(1, #"{"error":"the room service isn't running","code":"room_service_down"}"#), .down)
@@ -452,6 +453,7 @@ final class Tester {
       equal(RoomReport.of(.resume, .ok(data("cli/resume.json")), room: r), RoomReport(paused: .init(value: nil)))
       equal(RoomReport.of(.bed, .down, room: r).problems, ["The room service isn't running, so nothing changed."])
       equal(RoomReport.of(.pause, .refused("room.pause is draft"), room: r).problems, ["noah-os's policy said no: room.pause is draft"])
+      equal(RoomReport.of(.pause, .refused(nil), room: r).problems, ["noah-os's policy said no."])
       equal(RoomReport.of(.leaving, .usage("x"), room: nil).problems, ["noah room isn't installed yet, so nothing changed."])
       let partial = #"{"ok":false,"scene":"lilac-moon","lights":{"bar-left":"failed","fan-far":"failed","fan-desk":"unreachable"},"halo":"failed"}"#
       equal(RoomReport.of(.scene("lilac-moon"), .ok(Data(partial.utf8)), room: r).problems,
@@ -558,12 +560,14 @@ final class Tester {
     await test("status works but watch exits 2: watch failed, not a missing CLI") {
       set("watch-exit", "2")
       let f = feed()
+      var seen: [RoomState] = []
+      f.onChange = { seen.append(f.state) }
       f.start()
-      expect(await until { f.state == .failed(.watch) }, "watch failed: \(f.state)")
-      try? await Task.sleep(for: .milliseconds(400))
-      expect(f.state != .unavailable(RoomCLI.notInstalled), "never not installed")
-      equal(infos(menu(f.state)), ["noah room watch failed, trying again"])
+      // The feed keeps cycling live, then watch failed: every state it showed counts, not one read.
+      expect(await until { seen.filter { $0 == .failed(.watch) }.count >= 2 }, "watch failed twice: \(seen.map(Self.name))")
       f.stop()
+      expect(!seen.contains { if case .unavailable = $0 { true } else { false } }, "never not installed: \(seen.map(Self.name))")
+      equal(infos(menu(.failed(.watch))), ["noah room watch failed, trying again"])
     }
 
     await test("status failing on stderr shows a fixed sentence, not the stderr") {
@@ -671,15 +675,28 @@ final class Tester {
       app.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
       app.environment = ProcessInfo.processInfo.environment.merging(["ROOM_HARNESS": "1"]) { $1 }
       try app.run()
+      var pid: Int32?
+      // Whatever happens below, neither process outlives the test (and holds the gate).
+      defer {
+        if let pid, alive(pid) { kill(pid, SIGKILL) }
+        if app.isRunning {
+          kill(app.processIdentifier, SIGKILL)
+          app.waitUntilExit()
+        }
+      }
       expect(await until { watchPid != nil }, "watching")
-      guard let pid = watchPid else { return app.terminate() }
+      pid = watchPid
+      guard let pid else { return }
       expect(alive(pid), "the watch child runs")
       kill(app.processIdentifier, SIGTERM)
-      expect(await until(3) { !app.isRunning }, "the app exits")
+      guard await until(3, { !app.isRunning }) else {
+        kill(app.processIdentifier, SIGKILL)
+        app.waitUntilExit()
+        return expect(false, "the app didn't exit on SIGTERM")
+      }
       equal(app.terminationReason, .uncaughtSignal)
       equal(app.terminationStatus, SIGTERM)
       expect(await until(3) { !alive(pid) }, "the watch child \(pid) is gone")
-      if alive(pid) { kill(pid, SIGKILL) }
     }
   }
 
