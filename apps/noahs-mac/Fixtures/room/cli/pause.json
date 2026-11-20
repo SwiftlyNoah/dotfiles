@@ -1,0 +1,12 @@
+{
+  "fixture": "room-fixture/1",
+  "paused": {
+    "until": "2030-01-15T21:41:10-05:00",
+    "until_mode": null,
+    "level": 2,
+    "by": "by_hand",
+    "why": "paused by hand from the command line",
+    "via": "cli",
+    "since": "2030-01-15T20:41:10-05:00"
+  }
+}

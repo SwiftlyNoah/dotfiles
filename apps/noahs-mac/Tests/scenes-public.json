@@ -1,0 +1,201 @@
+{
+  "schema": "room-scenes/1",
+  "palette": {
+    "lilac": {
+      "xy": [
+        0.2875,
+        0.2024
+      ],
+      "hex": "#c4a7e7"
+    },
+    "rose": {
+      "xy": [
+        0.4553,
+        0.3353
+      ],
+      "hex": "#ea9a97"
+    },
+    "gold": {
+      "xy": [
+        0.47,
+        0.43
+      ],
+      "hex": "#f6c177"
+    },
+    "foam": {
+      "xy": [
+        0.2425,
+        0.3095
+      ],
+      "hex": "#9ccfd8"
+    },
+    "pine": {
+      "xy": [
+        0.1602,
+        0.229
+      ],
+      "hex": "#3e8fb0"
+    },
+    "warm white": {
+      "xy": [
+        0.4578,
+        0.4101
+      ],
+      "hex": "#ffd9b0"
+    },
+    "cool white": {
+      "xy": [
+        0.3324,
+        0.3474
+      ],
+      "hex": "#f2f1ff"
+    },
+    "ember": {
+      "xy": [
+        0.64,
+        0.34
+      ],
+      "hex": "#e5622e"
+    }
+  },
+  "lights": [
+    {
+      "key": "bar-left",
+      "label": "Left bar"
+    },
+    {
+      "key": "bar-right",
+      "label": "Right bar"
+    },
+    {
+      "key": "fan-desk",
+      "label": "Fan, desk side"
+    },
+    {
+      "key": "fan-far",
+      "label": "Fan, far side"
+    },
+    {
+      "key": "halo",
+      "label": "Halo"
+    }
+  ],
+  "scenes": [
+    {
+      "key": "lilac-moon",
+      "name": "Lilac Moon",
+      "number": 8,
+      "family": "moods",
+      "lights": {
+        "bar-left": {
+          "on": true,
+          "color": "lilac",
+          "percent": 80
+        },
+        "bar-right": {
+          "on": true,
+          "color": "rose",
+          "percent": 70
+        },
+        "fan-desk": {
+          "on": true,
+          "color": "lilac",
+          "percent": 25
+        },
+        "fan-far": {
+          "on": true,
+          "color": "foam",
+          "percent": 15
+        },
+        "halo": {
+          "on": true,
+          "mode": "back",
+          "kelvin": 2700,
+          "percent": 20
+        }
+      }
+    },
+    {
+      "key": "focus",
+      "name": "Focus",
+      "number": 3,
+      "family": "everyday",
+      "lights": {
+        "bar-left": {
+          "on": true,
+          "color": "cool white",
+          "percent": 25
+        },
+        "bar-right": {
+          "on": true,
+          "color": "cool white",
+          "percent": 25
+        },
+        "fan-desk": {
+          "on": true,
+          "kelvin": 4000,
+          "percent": 70
+        },
+        "fan-far": {
+          "on": true,
+          "kelvin": 4000,
+          "percent": 70
+        },
+        "halo": {
+          "on": true,
+          "mode": "front",
+          "kelvin": 4000,
+          "percent": 70
+        }
+      }
+    },
+    {
+      "key": "lights-out",
+      "name": "Lights out",
+      "number": 11,
+      "family": "sleep",
+      "lights": {
+        "bar-left": {
+          "on": false
+        },
+        "bar-right": {
+          "on": false
+        },
+        "fan-desk": {
+          "on": false
+        },
+        "fan-far": {
+          "on": false
+        },
+        "halo": {
+          "on": false
+        }
+      }
+    },
+    {
+      "key": "fan-only",
+      "name": "Fan only",
+      "number": 99,
+      "family": "everyday",
+      "lights": {
+        "bar-left": {
+          "on": false
+        },
+        "bar-right": {
+          "on": false
+        },
+        "fan-desk": {
+          "on": true,
+          "kelvin": 2700,
+          "percent": 70
+        },
+        "fan-far": {
+          "on": false
+        },
+        "halo": {
+          "on": false
+        }
+      }
+    }
+  ]
+}

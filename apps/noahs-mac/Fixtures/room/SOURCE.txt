@@ -1,0 +1,2 @@
+Interim fixtures, written from the room contract's own examples (v1, 2026-11-20) until noah-os
+commits test/fixtures/room. Replace them with verbatim copies then, and name the noah-os commit here.

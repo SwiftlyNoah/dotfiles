@@ -1,0 +1,68 @@
+#!/bin/sh
+# A stand-in for noah-os's `noah` in the menu bar's tests (test.sh). It answers `noah room ...`
+# from the room fixtures ($ROOM_FIXTURES/cli) and never opens a socket or reaches a bridge.
+# A test steers it with files in $FAKE_NOAH_DIR, read on every call:
+#   state       live (the default); down (exit 4); old (a noah-os without `noah room`: its usage,
+#               exit 2); refused (exit 3); failed (exit 1); partial (a scene with a failed light);
+#               unreachable (a scene with an unreachable light)
+#   watch       fixture paths, one per line, that `noah room watch` prints as one line each
+#   watch-exit  watch's exit code once it has printed them (default 0)
+#   watch-hold  seconds watch stays up after printing (default 0)
+#   export      the file `noah room export --public` prints
+#   calls       each call's arguments are appended here, one line per call
+set -eu
+fixtures=${ROOM_FIXTURES:?}/cli
+dir=${FAKE_NOAH_DIR:?}
+
+setting() {
+  if [ -f "$dir/$1" ]; then cat "$dir/$1"; else printf '%s' "$2"; fi
+}
+
+printf '%s\n' "$*" >> "$dir/calls"
+state=$(setting state live)
+
+if [ "${1:-}" != room ] || [ "$state" = old ]; then
+  printf 'usage:\n  noah status [--json]\n  noah lights [status [--json] | on | off]\n' >&2
+  exit 2
+fi
+command=${2:-}
+
+case $state in
+  down)
+    tr -d '\n' < "$fixtures/error-room-service-down.json"
+    echo
+    exit 4
+    ;;
+  refused)
+    echo '{"error":"room.scene is not auto in the policy","code":"policy"}'
+    exit 3
+    ;;
+  failed)
+    echo "noah: the light service didn't answer in 10 s" >&2
+    exit 1
+    ;;
+esac
+
+case $command in
+  status) cat "$fixtures/status.json" ;;
+  watch)
+    setting watch "" | while IFS= read -r file || [ -n "$file" ]; do
+      [ -n "$file" ] && tr -d '\n' < "$file" && echo
+    done
+    sleep "$(setting watch-hold 0)"
+    exit "$(setting watch-exit 0)"
+    ;;
+  scene)
+    case $state in
+      partial) echo '{"ok":false,"scene":"focus","number":3,"at":"2030-01-15T20:41:09.004-05:00","fade_s":0,"lights":{"bar-left":"ok","bar-right":"ok","fan-desk":"failed","fan-far":"unreachable"},"halo":"not_set_up","by":{"client":"menubar","who":"menu bar"}}' ;;
+      unreachable) echo '{"ok":true,"scene":"focus","number":3,"at":"2030-01-15T20:41:09.004-05:00","fade_s":0,"lights":{"bar-left":"ok","bar-right":"ok","fan-desk":"unreachable","fan-far":"unreachable"},"halo":"not_set_up","by":{"client":"menubar","who":"menu bar"}}' ;;
+      *) cat "$fixtures/scene.json" ;;
+    esac
+    ;;
+  pause | resume | leaving | bed | skip-wake) cat "$fixtures/$command.json" ;;
+  export) cat "$(setting export /dev/null)" ;;
+  *)
+    echo "usage: noah room status|watch|scene|pause|resume|leaving|bed|skip-wake|export" >&2
+    exit 2
+    ;;
+esac
