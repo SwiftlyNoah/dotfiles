@@ -1,0 +1,3 @@
+Copied verbatim from noah-os test/fixtures/room at b983b152e9ab6cb488e09313b3e25a7d75957edb
+(branch swarm/room-os, room-fixture/1). Copy them again, never edit them here, when noah-os bumps
+room-fixture/N.

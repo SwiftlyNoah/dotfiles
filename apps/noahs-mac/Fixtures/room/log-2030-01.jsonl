@@ -1,0 +1,23 @@
+{"v":1,"t":"2030-01-15T00:00:00.100-05:00","kind":"reconcile","created":0,"updated":0,"deleted":0,"foreign":{"groups":2,"scenes":6,"rules":0,"schedules":0,"sensors":0},"ok":true,"error":null,"data_classes":[]}
+{"v":1,"t":"2030-01-15T00:20:41-05:00","kind":"motion_off","data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T00:31:00.002-05:00","kind":"lights_out","planned_at":"2030-01-15T00:15:00-05:00","fade_s":10,"by":"me","halo":"not_set_up","data_classes":["health"]}
+{"v":1,"t":"2030-01-15T00:31:00.010-05:00","kind":"wake_ramp","state":"written","wake_at":"2030-01-15T08:00:00-05:00","why":"motion between wind down and bed","data_classes":["health"]}
+{"v":1,"t":"2030-01-15T02:40:00.000-05:00","kind":"temp","temp_c":20.3,"from_c":20.6,"data_classes":["health"]}
+{"v":1,"t":"2030-01-15T03:12:00-05:00","kind":"night_up","from":"2030-01-15T03:12:00-05:00","to":"2030-01-15T03:14:00-05:00","minutes":2,"data_classes":["presence","health"]}
+{"v":1,"t":"2030-01-15T04:40:00-05:00","kind":"left_at_night","from":"2030-01-15T04:40:00-05:00","to":"2030-01-15T05:02:00-05:00","minutes":22,"data_classes":["presence","health"]}
+{"v":1,"t":"2030-01-15T07:51:00-05:00","kind":"up_for_day","data_classes":["presence","health"]}
+{"v":1,"t":"2030-01-15T07:52:10-05:00","kind":"motion_on","data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T08:00:00.004-05:00","kind":"mode","from":"sleep","to":"day","source":"clock","data_classes":["presence","health"]}
+{"v":1,"t":"2030-01-15T08:01:00.000-05:00","kind":"desk","on":true,"why":"keyboard","data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T09:04:30.000-05:00","kind":"lock","locked":true,"data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T09:05:00-05:00","kind":"exit","confidence":"sure","entry_t":"2030-01-14T19:02:00-05:00","data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T10:30:00-05:00","kind":"entry","confidence":"likely","gap_min":82,"why":"no screen lock before it","data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T11:02:00-05:00","kind":"short_trip","from":"2030-01-15T11:02:00-05:00","to":"2030-01-15T11:07:00-05:00","minutes":5,"confidence":"likely","data_classes":["presence"]}
+{"v":1,"t":"2030-01-15T13:09:00.000-05:00","kind":"gap","from":"2030-01-15T13:02:00-05:00","to":"2030-01-15T13:09:00-05:00","why":"service_down","data_classes":[]}
+{"v":1,"t":"2030-01-15T14:00:00.000-05:00","kind":"bridge_clock","offset_s":0.4,"ok":true,"data_classes":[]}
+{"v":1,"t":"2030-01-15T18:12:03-05:00","kind":"scene","scene":"arrive","number":1,"by":"rule","via":"A1","fade_s":0,"halo":"not_set_up","data_classes":[]}
+{"v":1,"t":"2030-01-15T18:40:00-05:00","kind":"quiet","step":"dim","via":"A7","data_classes":[]}
+{"v":1,"t":"2030-01-15T19:00:00.004-05:00","kind":"pause","until":"2030-01-15T19:30:00-05:00","level":2,"why":"paused by hand from the command line","via":"cli","data_classes":[]}
+{"v":1,"t":"2030-01-15T19:30:00.004-05:00","kind":"resume","why":"expired","via":"clock","data_classes":[]}
+{"v":1,"t":"2030-01-15T21:12:00.500-05:00","kind":"override","lights":["bar-left"],"what":"Left bar to rose","via":"portal","data_classes":[]}
+{"v":1,"t":"2030-01-15T21:30:00.000-05:00","kind":"mark","target_t":"2030-01-15T10:30:00-05:00","verdict":"right","data_classes":["presence"]}

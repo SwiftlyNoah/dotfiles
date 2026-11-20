@@ -1,0 +1,10 @@
+{
+  "fixture": "room-fixture/1",
+  "wake_ramp": {
+    "data_classes": [
+      "health"
+    ],
+    "state": "skipped",
+    "at": "2030-01-16T07:40:00-05:00"
+  }
+}

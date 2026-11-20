@@ -1,0 +1,19 @@
+{
+  "fixture": "room-fixture/1",
+  "ok": true,
+  "scene": "focus",
+  "number": 3,
+  "at": "2030-01-15T20:41:09.004-05:00",
+  "fade_s": 0,
+  "lights": {
+    "bar-left": "ok",
+    "bar-right": "ok",
+    "fan-desk": "ok",
+    "fan-far": "ok"
+  },
+  "halo": "not_set_up",
+  "by": {
+    "client": "cli",
+    "who": "Terminal"
+  }
+}

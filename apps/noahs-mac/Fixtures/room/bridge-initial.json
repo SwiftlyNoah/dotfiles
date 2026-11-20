@@ -1,0 +1,380 @@
+{
+  "fixture": "room-fixture/1",
+  "key": "fakeBridgeKey0123456789abcdefABCDEF",
+  "config": {
+    "name": "Philips hue",
+    "zigbeechannel": 25,
+    "bridgeid": "000000FFFE00C0DE",
+    "mac": "00:00:00:00:c0:de",
+    "dhcp": true,
+    "ipaddress": "127.0.0.1",
+    "netmask": "255.255.255.0",
+    "gateway": "127.0.0.1",
+    "proxyaddress": "none",
+    "proxyport": 0,
+    "UTC": "2030-01-16T01:41:07",
+    "localtime": "2030-01-15T20:41:07",
+    "timezone": "America/New_York",
+    "modelid": "BSB002",
+    "datastoreversion": "103",
+    "swversion": "1940042020",
+    "apiversion": "1.40.0",
+    "swupdate2": {
+      "state": "noupdates",
+      "bridge": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      }
+    },
+    "linkbutton": false,
+    "portalservices": false,
+    "portalconnection": "disconnected",
+    "factorynew": false,
+    "replacesbridgeid": null,
+    "starterkitid": "",
+    "whitelist": {
+      "fakeBridgeKey0123456789abcdefABCDEF": {
+        "last use date": "2030-01-16T01:41:07",
+        "create date": "2029-12-01T10:00:00",
+        "name": "noah-os#light service"
+      }
+    }
+  },
+  "lights": {
+    "1": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Hue play 1",
+      "modelid": "LCT024",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue play",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 540,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "hueplay",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "safety",
+          "configured": true
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:01-0b",
+      "swversion": "1.104.2"
+    },
+    "2": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Hue play 2",
+      "modelid": "LCT024",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue play",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 540,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "hueplay",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "safety",
+          "configured": true
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:02-0b",
+      "swversion": "1.104.2"
+    },
+    "3": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Fan desk side",
+      "modelid": "LCA013",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue color lamp",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 806,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "sultanbulb",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "safety",
+          "configured": true
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:03-0b",
+      "swversion": "1.104.2"
+    },
+    "4": {
+      "state": {
+        "on": false,
+        "bri": 254,
+        "hue": 8417,
+        "sat": 140,
+        "effect": "none",
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "alert": "none",
+        "colormode": "ct",
+        "mode": "homeautomation",
+        "reachable": true
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "type": "Extended color light",
+      "name": "Fan far side",
+      "modelid": "LCA013",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue color lamp",
+      "capabilities": {
+        "certified": true,
+        "control": {
+          "mindimlevel": 200,
+          "maxlumen": 806,
+          "colorgamuttype": "C",
+          "ct": {
+            "min": 153,
+            "max": 500
+          }
+        },
+        "streaming": {
+          "renderer": true,
+          "proxy": true
+        }
+      },
+      "config": {
+        "archetype": "sultanbulb",
+        "function": "decorative",
+        "direction": "omnidirectional",
+        "startup": {
+          "mode": "safety",
+          "configured": true
+        }
+      },
+      "uniqueid": "00:17:88:01:00:00:00:04-0b",
+      "swversion": "1.104.2"
+    }
+  },
+  "sensors": {
+    "1": {
+      "state": {
+        "daylight": false,
+        "lastupdated": "2030-01-15T22:01:00"
+      },
+      "config": {
+        "on": true,
+        "configured": true,
+        "sunriseoffset": 30,
+        "sunsetoffset": -30
+      },
+      "name": "Daylight",
+      "type": "Daylight",
+      "modelid": "PHDL00",
+      "manufacturername": "Signify Netherlands B.V.",
+      "swversion": "1.0"
+    },
+    "2": {
+      "state": {
+        "temperature": 2141,
+        "lastupdated": "2030-01-16T01:39:00"
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "config": {
+        "on": true,
+        "battery": 100,
+        "reachable": true,
+        "alert": "none",
+        "ledindication": false,
+        "usertest": false,
+        "pending": []
+      },
+      "name": "Hue temperature sensor 1",
+      "type": "ZLLTemperature",
+      "modelid": "SML001",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue temperature sensor",
+      "swversion": "6.1.1.27575",
+      "uniqueid": "00:17:88:01:00:00:00:0a-02-0402",
+      "capabilities": {
+        "certified": true,
+        "primary": false
+      }
+    },
+    "3": {
+      "state": {
+        "presence": false,
+        "lastupdated": "2030-01-16T01:40:27"
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "config": {
+        "on": true,
+        "battery": 100,
+        "reachable": true,
+        "alert": "none",
+        "sensitivity": 3,
+        "sensitivitymax": 4,
+        "ledindication": false,
+        "usertest": false,
+        "pending": []
+      },
+      "name": "Hue motion sensor 1",
+      "type": "ZLLPresence",
+      "modelid": "SML001",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue motion sensor",
+      "swversion": "6.1.1.27575",
+      "uniqueid": "00:17:88:01:00:00:00:0a-02-0406",
+      "capabilities": {
+        "certified": true,
+        "primary": true
+      }
+    },
+    "4": {
+      "state": {
+        "lightlevel": 10792,
+        "dark": true,
+        "daylight": false,
+        "lastupdated": "2030-01-16T01:38:10"
+      },
+      "swupdate": {
+        "state": "noupdates",
+        "lastinstall": "2029-12-01T10:00:00"
+      },
+      "config": {
+        "on": true,
+        "battery": 100,
+        "reachable": true,
+        "alert": "none",
+        "tholddark": 16000,
+        "tholdoffset": 7000,
+        "ledindication": false,
+        "usertest": false,
+        "pending": []
+      },
+      "name": "Hue ambient light sensor 1",
+      "type": "ZLLLightLevel",
+      "modelid": "SML001",
+      "manufacturername": "Signify Netherlands B.V.",
+      "productname": "Hue ambient light sensor",
+      "swversion": "6.1.1.27575",
+      "uniqueid": "00:17:88:01:00:00:00:0a-02-0400",
+      "capabilities": {
+        "certified": true,
+        "primary": false
+      }
+    }
+  },
+  "groups": {},
+  "scenes": {},
+  "rules": {},
+  "schedules": {}
+}

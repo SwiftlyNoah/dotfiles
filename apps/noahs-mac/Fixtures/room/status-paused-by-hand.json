@@ -1,0 +1,348 @@
+{
+  "fixture": "room-fixture/1",
+  "schema_version": 3,
+  "module": "room",
+  "title": "Room",
+  "built_at": "2030-01-15T20:41:10.002-05:00",
+  "data_as_of": "2030-01-15T20:41:07.120-05:00",
+  "data_as_of_basis": "oldest input: Hue Bridge read 2030-01-15T20:41:07.120-05:00",
+  "headline": "Lights: Left bar lilac 45%, Right bar lilac 45%, fan 2700 K 45%",
+  "sources": [
+    {
+      "id": "hue-bridge",
+      "label": "Hue Bridge",
+      "system": "hue-bridge",
+      "read_at": "2030-01-15T20:41:07.120-05:00",
+      "checked_through": "2030-01-15T20:41:07.120-05:00",
+      "check_every_hours": 0.05,
+      "ok": true,
+      "error": null,
+      "last_attempt_at": "2030-01-15T20:41:07.120-05:00",
+      "host": "192.168.77.10",
+      "via": "light service",
+      "misses": 0
+    },
+    {
+      "id": "halo",
+      "label": "Halo",
+      "system": "halo-service",
+      "read_at": null,
+      "ok": true,
+      "error": null,
+      "counts": false,
+      "state": "not_set_up"
+    },
+    {
+      "id": "sleep-window",
+      "label": "Sleep window",
+      "system": "module:health",
+      "read_at": "2030-01-14T09:00:00-05:00",
+      "ok": true,
+      "error": null,
+      "counts": false
+    }
+  ],
+  "version": 815,
+  "lights": [
+    {
+      "id": "2",
+      "key": "bar-left",
+      "label": "Left bar",
+      "name": "Hue play 2",
+      "on": true,
+      "brightness": 45,
+      "bri": 114,
+      "reachable": true,
+      "colormode": "xy",
+      "xy": [
+        0.2875,
+        0.2024
+      ],
+      "ct": null,
+      "kelvin": null,
+      "color_name": "lilac"
+    },
+    {
+      "id": "1",
+      "key": "bar-right",
+      "label": "Right bar",
+      "name": "Hue play 1",
+      "on": true,
+      "brightness": 45,
+      "bri": 114,
+      "reachable": true,
+      "colormode": "xy",
+      "xy": [
+        0.2875,
+        0.2024
+      ],
+      "ct": null,
+      "kelvin": null,
+      "color_name": "lilac"
+    },
+    {
+      "id": "3",
+      "key": "fan-desk",
+      "label": "Fan, desk side",
+      "name": "Fan desk side",
+      "on": true,
+      "brightness": 45,
+      "bri": 114,
+      "reachable": true,
+      "colormode": "ct",
+      "xy": [
+        0.4578,
+        0.4101
+      ],
+      "ct": 370,
+      "kelvin": 2700,
+      "color_name": null
+    },
+    {
+      "id": "4",
+      "key": "fan-far",
+      "label": "Fan, far side",
+      "name": "Fan far side",
+      "on": true,
+      "brightness": 45,
+      "bri": 114,
+      "reachable": true,
+      "colormode": "ct",
+      "xy": [
+        0.4578,
+        0.4101
+      ],
+      "ct": 370,
+      "kelvin": 2700,
+      "color_name": null
+    }
+  ],
+  "halo": {
+    "state": "not_set_up",
+    "why": "the Halo's radio board isn't set up yet (noah halo setup)",
+    "power": null,
+    "mode": null,
+    "kelvin": null,
+    "brightness": null,
+    "as_of": null
+  },
+  "sensor": {
+    "data_classes": [
+      "presence"
+    ],
+    "presence": false,
+    "last_motion_at": "2030-01-15T20:40:27-05:00",
+    "temp_c": 21.41,
+    "temp_f": 70.5,
+    "lux": 12,
+    "dark": true,
+    "daylight": false,
+    "battery": 100,
+    "reachable": true,
+    "read_at": "2030-01-15T20:41:07.120-05:00"
+  },
+  "mode": {
+    "data_classes": [
+      "presence",
+      "health"
+    ],
+    "current": "evening",
+    "since": "2030-01-15T19:00:00-05:00",
+    "source": "clock",
+    "on_bridge": 2
+  },
+  "paused": {
+    "data_classes": [],
+    "until": "2030-01-15T21:41:10-05:00",
+    "until_mode": null,
+    "level": 2,
+    "by": "by_hand",
+    "why": "paused by hand from the menu bar",
+    "via": "menubar",
+    "since": "2030-01-15T20:41:10-05:00"
+  },
+  "desk": {
+    "data_classes": [
+      "presence"
+    ],
+    "at_desk": true,
+    "why": "keyboard",
+    "since": "2030-01-15T20:02:00-05:00",
+    "lease_until": "2030-01-15T20:56:00-05:00"
+  },
+  "scene": {
+    "data_classes": [],
+    "last": "evening",
+    "number": 4,
+    "at": "2030-01-15T19:00:00-05:00",
+    "by": "automation",
+    "via": "A10 evening drift"
+  },
+  "visit": {
+    "data_classes": [
+      "presence"
+    ],
+    "in_room": true,
+    "since": "2030-01-15T20:15:02-05:00",
+    "confidence": "sure"
+  },
+  "next": {
+    "data_classes": [
+      "health"
+    ],
+    "events": [
+      {
+        "kind": "pause_ends",
+        "at": "2030-01-15T21:41:10-05:00"
+      },
+      {
+        "kind": "late",
+        "at": "2030-01-15T22:00:00-05:00"
+      },
+      {
+        "kind": "wind_down",
+        "at": "2030-01-15T23:30:00-05:00"
+      },
+      {
+        "kind": "last_call",
+        "at": "2030-01-16T00:00:00-05:00"
+      },
+      {
+        "kind": "lights_out",
+        "at": "2030-01-16T00:15:00-05:00"
+      },
+      {
+        "kind": "wake_ramp",
+        "at": "2030-01-16T07:40:00-05:00",
+        "state": "planned"
+      },
+      {
+        "kind": "wake",
+        "at": "2030-01-16T08:00:00-05:00"
+      }
+    ]
+  },
+  "bridge": {
+    "ok": true,
+    "clock_ok": true,
+    "clock_offset_s": 0.4,
+    "firmware": "1940042020",
+    "api": "1.40",
+    "rules": 16,
+    "reconciled_at": "2030-01-15T20:00:03-05:00"
+  },
+  "today": {
+    "schema": "room-day/1",
+    "day": "2030-01-15",
+    "from": "2030-01-15T04:00:00-05:00",
+    "to": "2030-01-16T04:00:00-05:00",
+    "built_at": "2030-01-15T20:40:00-05:00",
+    "partial": true,
+    "gaps": [
+      {
+        "from": "2030-01-15T13:02:00-05:00",
+        "to": "2030-01-15T13:09:00-05:00",
+        "why": "service_down"
+      }
+    ],
+    "presence": {
+      "data_classes": [
+        "presence"
+      ],
+      "entries": {
+        "about": 4,
+        "sure": 2,
+        "likely": 2
+      },
+      "short_trips": 2,
+      "first_motion_at": "2030-01-15T07:52:10-05:00",
+      "last_motion_at": "2030-01-15T20:40:27-05:00",
+      "left_for_day_at": "2030-01-15T09:05:00-05:00",
+      "in_room_awake_min": 290,
+      "desk_min": 205,
+      "guesses": [
+        {
+          "at": "2030-01-15T10:30:00-05:00",
+          "kind": "entry",
+          "confidence": "likely",
+          "gap_min": 82,
+          "why": "no screen lock before it",
+          "mark": null
+        }
+      ]
+    },
+    "lights": {
+      "data_classes": [],
+      "on_min": {
+        "bar-left": 240,
+        "bar-right": 240,
+        "fan-desk": 110,
+        "fan-far": 120
+      },
+      "halo_on_min": null,
+      "scenes": [
+        {
+          "scene": "arrive",
+          "count": 3,
+          "by": {
+            "rule": 3,
+            "schedule": 0,
+            "automation": 0,
+            "me": 0
+          }
+        },
+        {
+          "scene": "evening",
+          "count": 1,
+          "by": {
+            "rule": 0,
+            "schedule": 0,
+            "automation": 1,
+            "me": 0
+          }
+        }
+      ],
+      "rule_fires": {
+        "A1": 3,
+        "A7": 1,
+        "A9": 1
+      },
+      "overrides": []
+    },
+    "environment": {
+      "data_classes": [],
+      "temp_c": {
+        "min": 20.1,
+        "max": 22.3,
+        "mean": 21.2
+      },
+      "dark_min": 610,
+      "daylight_lux_max": 160
+    },
+    "night": {
+      "data_classes": [
+        "health"
+      ],
+      "complete": false,
+      "wind_down": {
+        "planned_at": "2030-01-15T23:30:00-05:00",
+        "state": "planned"
+      },
+      "lights_out": {
+        "planned_at": "2030-01-16T00:15:00-05:00",
+        "at": null,
+        "late_min": null,
+        "by": null
+      },
+      "up_at_night": [],
+      "left_at_night": [],
+      "up_for_day_at": null,
+      "wake_ramp": {
+        "planned_at": "2030-01-16T07:40:00-05:00",
+        "state": "planned"
+      },
+      "temp_overnight_c": null
+    }
+  },
+  "notices": []
+}

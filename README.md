@@ -44,11 +44,15 @@ to the chimes.
   gets one built for its size, on its own: plug in a new monitor and Hammerspoon has it
   wearing Lilac Moon about a minute later. `wallpaper/deskmat.py` paints the same night lake
   as the print file for the desk mat.
-- **Noah's Mac in the menu bar** (the moon, [`apps/noahs-mac`](apps/noahs-mac)): whether
+- **Noah's Mac in the menu bar** (the moon, [`apps/noahs-mac`](apps/noahs-mac)): my room's
+  lights and automations, live from noah-os's `noah room` (the moon takes the light bars'
+  color, and fills with amber during wind down), with Focus (⌃⌥F) and Watch (⌃⌥W) from
+  anywhere, the other scenes, Room off, Leaving, Going to bed and an hour's pause; whether
   my portal is up, with Open Portal (⌘O) and Copy Link; AirDrop on for 10, 30 or 60 minutes
   (the moon turns into radio waves while it's on); and the wallpaper following the sun or
   held at any of its twelve times, each shown as a thumbnail. Built from source with
-  `swiftc` on every rebuild that changes it, and started at login.
+  `swiftc` on every rebuild that changes it, and started at login. `test.sh` builds it
+  without installing it and runs the room's tests against a fake `noah`.
 - **One sound for "something needs me":** "Lilac", two soft falling marimba notes, both
   when an agent has a question and as the Mac's alert.
 - **A quiet [herdr](https://herdr.dev) sidebar:** one line per agent (a gold dot while it
@@ -107,7 +111,7 @@ command just says it isn't installed), Amphetamine and ColorSlurp.
 What's still mine until you change it ([Make it yours](#make-it-yours)): the git name and
 email, the `user` in `flake.nix` (bootstrap offers to set it), my rules for agents in
 `home/AGENTS.md`, and Noah's Mac, the menu bar app (its portal item looks for my own site's
-server, which yours won't have).
+server, and its Room section for my noah-os, which yours won't have).
 
 ## What's on my Mac
 
@@ -397,7 +401,7 @@ rebuild.sh                apply the config (the first time too)
 local.example.json        the format of your own settings (local/, ignored here)
 palette.json              Lilac Moon's colors, the one source (palette.py checks the configs)
 wallpaper/                the dynamic wallpaper and the desk mat's print file
-apps/noahs-mac/           Noah's Mac, the menu bar app (build.sh builds and installs it)
+apps/noahs-mac/           Noah's Mac, the menu bar app (build.sh builds and installs it, test.sh tests it)
 home/
   AGENTS.md               rules for every coding agent
   .claude/                Claude Code settings, hooks and status line

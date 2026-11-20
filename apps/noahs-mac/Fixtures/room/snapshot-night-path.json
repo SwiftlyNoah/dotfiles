@@ -1,0 +1,172 @@
+{
+  "fixture": "room-fixture/1",
+  "seq": 5120,
+  "started_at": "2030-01-15T06:00:01.004-05:00",
+  "polled_at": "2030-01-16T03:12:20.400-05:00",
+  "read_at": "2030-01-16T03:12:20.400-05:00",
+  "ok": true,
+  "error": null,
+  "code": null,
+  "misses": 0,
+  "lights": {
+    "1": {
+      "name": "Hue play 1",
+      "modelid": "LCT024",
+      "state": {
+        "on": true,
+        "bri": 4,
+        "xy": [
+          0.64,
+          0.34
+        ],
+        "ct": 153,
+        "colormode": "xy",
+        "reachable": true
+      }
+    },
+    "2": {
+      "name": "Hue play 2",
+      "modelid": "LCT024",
+      "state": {
+        "on": true,
+        "bri": 4,
+        "xy": [
+          0.64,
+          0.34
+        ],
+        "ct": 153,
+        "colormode": "xy",
+        "reachable": true
+      }
+    },
+    "3": {
+      "name": "Fan desk side",
+      "modelid": "LCA013",
+      "state": {
+        "on": false,
+        "bri": 114,
+        "xy": [
+          0.4578,
+          0.4101
+        ],
+        "ct": 370,
+        "colormode": "ct",
+        "reachable": true
+      }
+    },
+    "4": {
+      "name": "Fan far side",
+      "modelid": "LCA013",
+      "state": {
+        "on": true,
+        "bri": 1,
+        "xy": [
+          0.64,
+          0.34
+        ],
+        "ct": 153,
+        "colormode": "xy",
+        "reachable": true
+      }
+    }
+  },
+  "sensors": {
+    "1": {
+      "type": "Daylight",
+      "state": {
+        "daylight": false,
+        "lastupdated": "2030-01-15T22:01:00"
+      },
+      "config": {
+        "on": true
+      }
+    },
+    "2": {
+      "type": "ZLLTemperature",
+      "state": {
+        "temperature": 2010,
+        "lastupdated": "2030-01-16T08:05:00"
+      },
+      "config": {
+        "on": true,
+        "reachable": true,
+        "battery": 100
+      }
+    },
+    "3": {
+      "type": "ZLLPresence",
+      "state": {
+        "presence": true,
+        "lastupdated": "2030-01-16T08:12:14"
+      },
+      "config": {
+        "on": true,
+        "reachable": true,
+        "battery": 100,
+        "sensitivity": 3
+      }
+    },
+    "4": {
+      "type": "ZLLLightLevel",
+      "state": {
+        "lightlevel": 2400,
+        "dark": true,
+        "daylight": false,
+        "lastupdated": "2030-01-16T08:12:15"
+      },
+      "config": {
+        "on": true,
+        "reachable": true,
+        "battery": 100
+      }
+    }
+  },
+  "flags": {
+    "room.mode": {
+      "status": 5,
+      "lastupdated": "2030-01-16T05:15:00"
+    },
+    "room.desk": {
+      "status": 0,
+      "lastupdated": "2030-01-16T05:20:00"
+    },
+    "room.paused": {
+      "status": 0,
+      "lastupdated": "2030-01-15T19:00:00"
+    },
+    "room.scene": {
+      "status": 12,
+      "lastupdated": "2030-01-16T08:12:14"
+    },
+    "room.night": {
+      "flag": true,
+      "lastupdated": "2030-01-16T08:12:14"
+    }
+  },
+  "groups": {
+    "room": {
+      "any_on": true,
+      "all_on": false
+    },
+    "bars": {
+      "any_on": true,
+      "all_on": true
+    },
+    "fan": {
+      "any_on": true,
+      "all_on": false
+    }
+  },
+  "journal": [
+    {
+      "seq": 1004,
+      "at": "2030-01-16T00:15:00.050-05:00",
+      "client": "room",
+      "target": "group:room",
+      "body": {
+        "on": false,
+        "transitiontime": 100
+      }
+    }
+  ]
+}

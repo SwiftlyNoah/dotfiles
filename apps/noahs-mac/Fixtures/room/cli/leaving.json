@@ -1,0 +1,22 @@
+{
+  "fixture": "room-fixture/1",
+  "mode": "away",
+  "result": {
+    "ok": true,
+    "scene": "away",
+    "number": 14,
+    "at": "2030-01-15T20:45:00.010-05:00",
+    "fade_s": 0,
+    "lights": {
+      "bar-left": "ok",
+      "bar-right": "ok",
+      "fan-desk": "ok",
+      "fan-far": "ok"
+    },
+    "halo": "not_set_up",
+    "by": {
+      "client": "menubar",
+      "who": "the menu bar"
+    }
+  }
+}

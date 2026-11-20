@@ -1,6 +1,7 @@
-// Noah's Mac: a menu bar app for the things this Mac does for me. The portal's status and
-// link, AirDrop on for a while (the awdl-guard job keeps it off otherwise), and the Lilac
-// Moon wallpaper following the sun or held at one time of day.
+// Noah's Mac: a menu bar app for the things this Mac does for me. The room's lights and
+// automations (through noah-os's `noah room`, Room.swift), the portal's status and link,
+// AirDrop on for a while (the awdl-guard job keeps it off otherwise), and the Lilac Moon
+// wallpaper following the sun or held at one time of day.
 import AppKit
 
 @main
@@ -19,6 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   private var statusItem: NSStatusItem!
   private let portal = Portal()
+  private let room = RoomFeed(cli: RoomCLI(noah: RoomCLI.defaultNoah))
+  private var roomScenes: RoomScenes?
+  private var scenesTriedAt: Date?
+  private var hotkeysRegistered = false
+  private var roomModel: RoomMenu?
+  private var roomItems: [NSMenuItem] = []
+  private var iconKey = ""
   private var portalLine: NSMenuItem?
   private var openPortalItem: NSMenuItem?
   private var copyLinkItem: NSMenuItem?
@@ -32,8 +40,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     statusItem.menu = menu
     updateIcon()
 
-    portal.onChange = { [weak self] in self?.updatePortalLines() }
+    portal.onChange = { [weak self] in
+      self?.updatePortalLines()
+      self?.refreshRoomItems()
+    }
     portal.refresh()
+
+    room.onChange = { [weak self] in
+      guard let self else { return }
+      if roomScenes == nil { loadScenes() }
+      registerHotkeys()
+      updateIcon()
+      refreshRoomItems()
+    }
+    room.start()
+    Termination.onSignal { AppDelegate.shared?.room.stop() }
 
     // The icon follows AirDrop's real state, which can change without this app (the guard
     // job closing a window when it ends).
@@ -48,25 +69,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  func applicationWillTerminate(_ notification: Notification) {
+    room.stop()
+  }
+
+  /// The moon, unless AirDrop is on (radio waves). The moon takes the bars' color while they're
+  /// on and fills with amber during wind down. The 3 s timer also catches the menu bar turning
+  /// light or dark.
   private func updateIcon() {
-    let on = AirDrop.isUp
-    let name = on ? "dot.radiowaves.left.and.right" : "moon.fill"
-    let image = NSImage(systemSymbolName: name, accessibilityDescription: on ? "Noah's Mac, AirDrop on" : "Noah's Mac")
-    image?.isTemplate = true
-    if statusItem.button?.image?.accessibilityDescription != image?.accessibilityDescription {
-      statusItem.button?.image = image
+    let airDrop = AirDrop.isUp
+    let lightBar = statusItem.button?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+    let moon = RoomIcon.of(room.state, palette: roomScenes?.palette ?? [:], lightMenuBar: lightBar)
+    let key = airDrop ? "airdrop" : "\(moon)"
+    guard key != iconKey else { return }
+    iconKey = key
+    let image: NSImage?
+    if airDrop {
+      image = NSImage(systemSymbolName: "dot.radiowaves.left.and.right", accessibilityDescription: "Noah's Mac, AirDrop on")
+      image?.isTemplate = true
+    } else {
+      image = RoomMenuItems.moon(moon)
     }
+    statusItem.button?.image = image
   }
 
   // MARK: The menu, rebuilt each time it opens
 
   func menuWillOpen(_ menu: NSMenu) {
     portal.refresh()
+    room.poke()
+    loadScenes()
   }
 
   func menuNeedsUpdate(_ menu: NSMenu) {
     menu.removeAllItems()
 
+    roomModel = nil
+    roomItems = makeRoomItems()
+    roomItems.forEach(menu.addItem)
+
+    menu.addItem(.separator())
     menu.addItem(.sectionHeader(title: "Portal"))
     let line = info("")
     portalLine = line
@@ -124,6 +166,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     portalLine?.title = s.summary
     openPortalItem?.isEnabled = s.url != nil
     copyLinkItem?.isEnabled = s.url != nil
+  }
+
+  // MARK: The room
+
+  private var roomPage: URL? {
+    portal.status.url?.appending(path: "portal/room/")
+  }
+
+  private func makeRoomItems() -> [NSMenuItem] {
+    let model = RoomMenu.build(room.state, now: .now, pageAvailable: roomPage != nil)
+    roomModel = model
+    return RoomMenuItems.make(model, dots: roomScenes?.dots, target: self, selector: #selector(roomAction(_:)))
+  }
+
+  /// Rebuilds the Room items in place while the menu is open, when what they say changed.
+  private func refreshRoomItems() {
+    guard let menu = statusItem.menu, let first = roomItems.first,
+          let start = menu.items.firstIndex(of: first) else { return }
+    let model = RoomMenu.build(room.state, now: .now, pageAvailable: roomPage != nil)
+    guard model != roomModel else { return }
+    roomItems.forEach(menu.removeItem)
+    roomItems = makeRoomItems()
+    for (offset, item) in roomItems.enumerated() { menu.insertItem(item, at: start + offset) }
+  }
+
+  /// The scenes' colors from `noah room export --public`: when the room first answers, and again
+  /// when the menu opens (at most every 5 minutes), so a room.yaml change shows up without a
+  /// restart.
+  private func loadScenes() {
+    guard room.state.cliExists, scenesTriedAt.map({ Date.now.timeIntervalSince($0) > 300 }) ?? true else { return }
+    scenesTriedAt = .now
+    Task {
+      if case .ok(let data) = await room.cli.export(), let scenes = RoomScenes.decode(data) { roomScenes = scenes }
+      updateIcon()
+    }
+  }
+
+  /// ⌃⌥F and ⌃⌥W are taken from every other app only once `noah room` exists on this Mac.
+  private func registerHotkeys() {
+    guard !hotkeysRegistered, room.state.cliExists else { return }
+    hotkeysRegistered = true
+    for (key, hotkey) in RoomMenu.hotkeys {
+      Hotkeys.register(hotkey) { AppDelegate.shared?.hotkey(.scene(key)) }
+    }
+  }
+
+  /// A hotkey runs its scene; with no `noah room` to run it, it does nothing, without an alert.
+  fileprivate func hotkey(_ action: RoomAction) {
+    if room.state.cliExists { run(action) }
+  }
+
+  @objc private func roomAction(_ sender: NSMenuItem) {
+    if let action = RoomMenuItems.action(of: sender) { run(action) }
+  }
+
+  fileprivate func run(_ action: RoomAction) {
+    if action == .openPage {
+      if let url = roomPage { NSWorkspace.shared.open(url) }
+      return
+    }
+    Task {
+      let problems = await room.perform(action)
+      report(problems)
+    }
   }
 
   private func info(_ title: String) -> NSMenuItem {
